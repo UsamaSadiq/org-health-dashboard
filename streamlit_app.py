@@ -88,9 +88,13 @@ def load_data() -> pd.DataFrame:
     # Normalise True/False strings that pandas may read as objects
     for col in df.columns:
         if df[col].dtype == object:
-            lowered = df[col].dropna().str.lower()
-            if set(lowered.unique()).issubset({"true", "false", ""}):
-                df[col] = df[col].map({"True": True, "False": False, True: True, False: False})
+            try:
+                lowered = df[col].dropna().str.lower()
+                if set(lowered.unique()).issubset({"true", "false", ""}):
+                    df[col] = df[col].map({"True": True, "False": False, True: True, False: False})
+            except AttributeError:
+                # Column contains non-string objects (e.g. actual booleans) — skip
+                pass
     return df
 
 
