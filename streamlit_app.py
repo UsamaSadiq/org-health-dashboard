@@ -192,11 +192,7 @@ with tab3:
         if cat_filter != "All":
             fail_df = fail_df[fail_df["Category"] == cat_filter]
 
-        st.dataframe(
-            fail_df.style.background_gradient(subset=["Failing"], cmap="Reds"),
-            use_container_width=True,
-            hide_index=True,
-        )
+        st.dataframe(fail_df, use_container_width=True, hide_index=True)
         st.metric("Active repos analysed", total_repos)
     else:
         st.info("No check columns found. Verify CSV schema.")
