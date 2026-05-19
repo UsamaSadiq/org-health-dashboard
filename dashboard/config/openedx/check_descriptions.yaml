@@ -1,0 +1,10 @@
+checks:
+  dependabot.exists:
+    description: "Dependabot keeps dependencies updated and surfaces security advisories"
+    source_url: "https://github.com/openedx/.github/blob/main/dependabot.yml"
+    applies_to_tiers: ["critical", "important", "standard"]
+    chaoss_metric: "Maintained"
+  exists.openedx.yaml:
+    description: "Standard Open edX configuration file"
+    source_url: "https://github.com/openedx/configuration"  # Placeholder
+    applies_to_tiers: ["critical", "important"]

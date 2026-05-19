@@ -1,0 +1,18 @@
+version: "1.0"
+letter_grades:
+  A: [80, 100]
+  B: [60, 79]
+  C: [40, 59]
+  D: [20, 39]
+  F: [0, 19]
+metrics:
+  commit_recency:
+    weight: 0.15
+    column: "github.last_push"
+    type: "days_ago"
+    parse_format: "%Y-%m-%d %H:%M:%S"
+    thresholds: [{days: 7, score: 100}, {days: 30, score: 80}, {days: 90, score: 50}, {days: 365, score: 20}]
+    default_when_missing: 50
+    status: "computable"
+    chaoss_metric: "Code Changes"
+  # More metrics will be added following PRD Appendix A

@@ -1,0 +1,7 @@
+groups:
+  - name: "Code Quality"
+    pattern: "code_quality\..*"
+    explicit: ["code_quality.readme_exists", "code_quality.docstrings"]
+  - name: "CI\ct"
+    pattern: "ci\..*"
+    explicit: ["ci.github_actions_configured"]

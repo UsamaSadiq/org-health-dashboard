@@ -1,0 +1,7 @@
+enable_sql_page: false
+enable_badge_links: false
+enable_compare_mode: true
+enable_pr_template_generator: true
+enable_weekly_bulletin_export: true
+enable_scorecard_panel: false
+enable_ecosysteems_enrichment: false

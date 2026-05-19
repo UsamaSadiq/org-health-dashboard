@@ -1,0 +1,10 @@
+csv_url: "https://raw.githubusercontent.com/openedx/wg-maintenance/main/dashboards/dashboard_main.csv"
+history_repo: "openedx/wg-maintenance"
+history_path: "dashboards/dashboard_main.csv"
+history_days: 90
+cache_ttl_seconds: 300
+fallback_to_last_known_good: true
+stale_threshold_hours: 48
+critically_stale_threshold_hours: 168
+expected_min_rows: 100
+expected_min_columns: 100

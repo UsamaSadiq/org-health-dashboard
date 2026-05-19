@@ -1,0 +1,10 @@
+# Repository tier classifications
+critical:
+  - "edx-platform"
+  - "xblock"
+important:
+  - "forum"
+  - "ora"
+standard:
+  - "common-lib"
+  - "other-core-repos"

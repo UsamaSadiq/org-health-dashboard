@@ -1,0 +1,4 @@
+reponame: "org-repo-health"
+repo_tier: "critical"
+attention_threshold: 0.75
+min_required_checks: 80%
