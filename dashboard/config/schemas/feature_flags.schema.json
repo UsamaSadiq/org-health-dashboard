@@ -8,7 +8,6 @@
     "enable_pr_template_generator": {"type": "boolean"},
     "enable_weekly_bulletin_export": {"type": "boolean"},
     "enable_scorecard_panel": {"type": "boolean"},
-    "enable_ecosystems_enrichment": {"type": "boolean"},
     "enable_maintainer_views": {"type": "boolean"},
     "enable_my_repos_filter": {"type": "boolean"}
   },

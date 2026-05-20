@@ -36,11 +36,10 @@ v2 was structurally sound but contained verifiable inaccuracies against the ship
 
 9. **Adopt Streamlit 1.55+ widget `bind=` for URL state sync** where it cleanly replaces manual query-param plumbing in `linking.py`. Manual plumbing is retained only for state that does not map 1:1 to a single widget (e.g., compound filters).
 10. **Adopt `st.column_config.LinkColumn`** for clickable repo cells in the All-Repos table and **`st.dialog`** for the "view raw check output" surface.
-11. **Add `ecosyste.ms` to prior art (Appendix E)** and as a Phase 2/3 enrichment candidate.
-12. **Streamlit Community Cloud cold-start and memory limits qualified.** Official documentation does not publish numeric limits; v3 marks any specific numbers as community-reported and treats Hetzner migration as a documented but unscheduled trigger.
-13. **CLA decision preserved, OpenStack DCO precedent explicitly acknowledged.** OpenStack moved from CLA to DCO effective 2025-07-01. v3 retains the AGPL-3.0-or-later + CLA combination on the productization rationale documented in Appendix C, but adds explicit prose in §10.5 and Appendix C explaining why this project's situation diverges from OpenStack's.
-14. **Implementation honesty.** The shipped `streamlit_app.py` has no error handling on the CSV fetch. v3 calls this out as a PR 2 deliverable, not pretending it is already there.
-15. **Glossary, Risk Register, and Definition-of-Done refined; no new top-level sections versus v2.**
+11. **Streamlit Community Cloud cold-start and memory limits qualified.** Official documentation does not publish numeric limits; v3 marks any specific numbers as community-reported and treats Hetzner migration as a documented but unscheduled trigger.
+12. **CLA decision preserved, OpenStack DCO precedent explicitly acknowledged.** OpenStack moved from CLA to DCO effective 2025-07-01. v3 retains the AGPL-3.0-or-later + CLA combination on the productization rationale documented in Appendix C, but adds explicit prose in §10.5 and Appendix C explaining why this project's situation diverges from OpenStack's.
+13. **Implementation honesty.** The shipped `streamlit_app.py` has no error handling on the CSV fetch. v3 calls this out as a PR 2 deliverable, not pretending it is already there.
+14. **Glossary, Risk Register, and Definition-of-Done refined; no new top-level sections versus v2.**
 
 ---
 
@@ -82,7 +81,6 @@ The dashboard is positioned alongside, not in competition with, the following pr
 
 - **OpenSSF Scorecard** — Linux Foundation security-posture checks across ~20 named checks. Complementary; the dashboard cross-references Scorecard check IDs (Appendix A and Appendix E). A Phase 2 enhancement reads upstream Scorecard JSON from `api.securityscorecards.dev` when available.
 - **CHAOSS metrics / Cauldron / GrimoireLab** — community-health metric definitions and tooling. The 9-metric formula in Appendix A is annotated with current CHAOSS metric names (e.g., *Contributor Absence Factor*, formerly *Bus Factor*).
-- **ecosyste.ms** — the largest open dataset of OSS repository and package metadata, ~262M repos and 11.4B dependency edges, with free APIs. A genuine prior-art reference and a potential Phase 2/3 enrichment data source.
 - **libraries.io, Snyk Advisor, GitHub Insights** — single-repo health surfaces. The dashboard is **org-scoped and curated**, which none of these are.
 - **OSSF Allstar, deps.dev** — org-level policy enforcement and dependency observability. The dashboard does not enforce; it surfaces.
 
@@ -317,7 +315,6 @@ These are designed for, not implemented in, this PRD. They have stub interfaces 
 - **Year-in-review and OpenGraph cards**. Generated as static HTML pages by a separate workflow step. Phase 2 trigger: requested by WG for annual recap or for forum-post unfurling.
 - **Embeddable score cards**. Standalone HTML per-repo pages iframed into discuss.openedx.org. Phase 2 trigger: discuss.openedx.org or similar adopts iframe support and at least one post requests it.
 - **OpenSSF Scorecard ingestion**. If a repo has a public Scorecard result, ingest its JSON from `https://api.securityscorecards.dev/projects/github.com/{OWNER}/{REPO}` and surface a parity panel on Repo Detail. Trigger: at least three tracked repos publish Scorecard results.
-- **ecosyste.ms enrichment**. Pull complementary metadata (dependent counts, package registry presence, funding links) from ecosyste.ms' free APIs to enrich the Repo Detail view. Trigger: WG or maintainer requests the data on a tracked repo.
 - **Hetzner self-host migration**. Phase 2 trigger: cold-start complaints from at least two working group members within a 30-day window, or badge endpoint is moved into the dashboard instead of `wg-maintenance`.
 
 ### 3.3 Phase 3+ (future, not designed)
@@ -576,7 +573,6 @@ enable_compare_mode: true
 enable_pr_template_generator: true
 enable_weekly_bulletin_export: true
 enable_scorecard_panel: false       # Phase 2
-enable_ecosystems_enrichment: false # Phase 2
 enable_llm_remediation: false       # Phase 3
 ```
 
@@ -1044,7 +1040,6 @@ Unresolved decisions deferred to implementation or explicitly punted.
 9. **AI/LLM remediation**. The technology and cost model are evolving rapidly. Decision: Phase 3, feature-flagged, opt-in only.
 10. **Snapshot retention policy**. The `wg-maintenance` repo keeps full history in git. Should the dashboard cap the displayed window to 90 days, or expose deeper history? Decision: 90 days in Phase 1; deeper history is a Phase 2 enhancement once DuckDB is in.
 11. **CLA vs DCO project-wide**. v3 retains CLA with a DCO fast path for trivial contributions. Revisited if (a) project moves into the `openedx/` org, (b) maintainer pool grows beyond two, or (c) Open edX governance issues a default position.
-12. **ecosyste.ms enrichment**. The data is free and the dataset is large. Decision: Phase 2, behind a feature flag; useful if WG asks for it.
 
 ---
 
@@ -1061,7 +1056,6 @@ Items captured for traceability, not designed in detail.
 - **CHAOSS OSS Sustainability toolkit** (CHAOSScon 2025) integration.
 - **Standardize as a CHAOSS sub-project**. The Linux Foundation CHAOSS umbrella is a natural governance home.
 - **OpenSSF Scorecard integration**. Ingest Scorecard JSON and surface a parity panel.
-- **ecosyste.ms enrichment** beyond Phase 2 metadata: funding links, dependent counts, package registry presence.
 
 ---
 
@@ -1135,7 +1129,7 @@ These columns are in the CSV and represent opportunity for future enrichment wit
 |---|---|
 | `language_bytes.*` (python, javascript, html, css, dockerfile, makefile, shell) | Language-aware grouping; flagging repos where the primary language has zero matching CI checks. |
 | `dependencies.count`, `dependencies.pypi.count`, `dependencies.pypi_all.count`, `dependencies.js.count`, `dependencies.js.all.count`, `dependencies.js.dev.count`, `dependencies.github.count` | Dependency volume signal; Phase 2 metric. |
-| `dependencies.pypi.list`, `dependencies.pypi_all.list`, `dependencies.js.list`, `dependencies.js.all.list`, `dependencies.js.dev.list`, `dependencies.github.list` | Vulnerability cross-reference with deps.dev / ecosyste.ms (Phase 2/3). |
+| `dependencies.pypi.list`, `dependencies.pypi_all.list`, `dependencies.js.list`, `dependencies.js.all.list`, `dependencies.js.dev.list`, `dependencies.github.list` | Vulnerability cross-reference with deps.dev and similar dependency intelligence sources (Phase 2/3). |
 | `django_packages.django_42.count`, `django_packages.django_42.list`, `django_packages.total.count`, `django_packages.total.list`, `django_packages.upgraded.count`, `django_packages.upgraded.list` | Django version drift / upgrade readiness; org-specific value. |
 | `requires.django`, `requires.pytest`, `requires.nose`, `requires.boto` | Test framework / cloud-SDK presence signal. |
 | `renovate.last_pr`, `renovate.total_open_prs`, `renovate.oldest_open_pr_date` | Renovate *health*, not just presence; useful refinement of Metric 9. |
@@ -1243,7 +1237,6 @@ If at any point the project's strategic direction changes, the CLA's existence m
 | CHAOSS | Community Health Analytics for Open Source Software, a Linux Foundation working group publishing metric definitions. |
 | Contributor Absence Factor (CAF) | The current canonical CHAOSS name for what was historically called "Bus Factor" or "Elephant Factor". |
 | OpenSSF Scorecard | Open Source Security Foundation tool that assigns 0–10 security scores to repos along 20 named checks. |
-| ecosyste.ms | An open data project (Andrew Nesbitt / Ben Nickolls) cataloguing OSS package and repository metadata with free APIs. |
 
 ---
 
@@ -1254,7 +1247,6 @@ If at any point the project's strategic direction changes, the CLA's existence m
 | **OpenSSF Scorecard** | 0–10 security-posture score, 20 checks (Binary-Artifacts, Branch-Protection, CI-Tests, CII-Best-Practices, Code-Review, Contributors, Dangerous-Workflow, Dependency-Update-Tool, Fuzzing, License, Maintained, Packaging, Pinned-Dependencies, SAST, SBOM, Security-Policy, Signed-Releases, Token-Permissions, Vulnerabilities, Webhooks), GitHub repo-by-repo, public REST API at `api.securityscorecards.dev`. | Single-repo focus; security-only; no org-curated view; no remediation snippets; no openedx-specific checks. Complementary, not a substitute. |
 | **CHAOSS Cauldron** | Hosted dashboard built on GrimoireLab/Perceval. | Heavy infra footprint; GPL stack; configuration outside git; aging Kibiter UI; multi-tenant SaaS model with cost. |
 | **GrimoireLab** | Self-hostable Bitergia-style stack. | 4–16GB RAM; GPLv3 forecloses productization; operational complexity. |
-| **ecosyste.ms** | Largest open dataset of OSS metadata: ~262M repos, ~11.4M packages, ~22B dependency edges, free APIs. | Universal package/repo catalogue, not openedx-curated; no scoring; no action loops; not a dashboard. **A genuine Phase 2/3 enrichment source.** |
 | **libraries.io** | Per-package health surface with sourcerank. | Package-centric, not repo-centric; not openedx-curated; declining maintenance. |
 | **Snyk Advisor** | Per-package health and security score. | Commercial; package-centric; no org-curated view. |
 | **GitHub Insights / repo health files** | GitHub-native, per-repo, community-profile checklist. | Single-repo, no org rollup, no scoring, no trend dimension, no remediation snippets. |
@@ -1318,7 +1310,6 @@ Quick references for tools named in this PRD.
 | OpenSSF Scorecard | https://github.com/ossf/scorecard | Cross-reference for security checks. |
 | OpenSSF Scorecard public API | https://api.securityscorecards.dev | Phase 2 ingestion. |
 | CHAOSS metrics | https://chaoss.community/kb-metrics-and-metrics-models/ | Cross-reference for community-health metrics. |
-| ecosyste.ms | https://ecosyste.ms | Phase 2/3 enrichment data. |
 | Perceval | https://github.com/chaoss/grimoirelab-perceval | Phase 3 contributor data via subprocess. |
 | ruff | https://docs.astral.sh/ruff/ | Python linter. |
 | mypy | https://mypy.readthedocs.io | Static type checker. |

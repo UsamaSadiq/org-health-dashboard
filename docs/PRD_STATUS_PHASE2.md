@@ -6,7 +6,7 @@ Generated from prd_tasks_phase2.yaml
 
 - done: 0
 - partial: 0
-- todo: 9
+- todo: 8
 
 - [ ] 3.2.1 Badge endpoint (Option B)
   - Deferred. Trigger: WG approval and one external repo adopting badge embed.
@@ -22,7 +22,5 @@ Generated from prd_tasks_phase2.yaml
   - Deferred. Trigger: iframe support confirmed and at least one requested usage.
 - [ ] 3.2.7 OpenSSF Scorecard ingestion
   - Deferred. Trigger: at least three tracked repos publish Scorecard results.
-- [ ] 3.2.8 ecosyste.ms enrichment
-  - Deferred. Trigger: WG or maintainer request for enrichment on tracked repos.
-- [ ] 3.2.9 Hetzner self-host migration
+- [ ] 3.2.8 Hetzner self-host migration
   - Deferred. Trigger: repeated cold-start complaints or badge endpoint moved into dashboard.
