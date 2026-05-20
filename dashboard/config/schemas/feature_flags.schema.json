@@ -9,7 +9,9 @@
     "enable_weekly_bulletin_export": {"type": "boolean"},
     "enable_scorecard_panel": {"type": "boolean"},
     "enable_maintainer_views": {"type": "boolean"},
-    "enable_my_repos_filter": {"type": "boolean"}
+    "enable_my_repos_filter": {"type": "boolean"},
+    "enable_year_in_review_cards": {"type": "boolean"},
+    "enable_embeddable_score_cards": {"type": "boolean"}
   },
   "additionalProperties": true
 }

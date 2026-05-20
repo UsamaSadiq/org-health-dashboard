@@ -6,3 +6,5 @@ enable_weekly_bulletin_export: true
 enable_scorecard_panel: false
 enable_maintainer_views: true
 enable_my_repos_filter: true
+enable_year_in_review_cards: false
+enable_embeddable_score_cards: false

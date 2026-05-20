@@ -10,6 +10,7 @@ from dashboard.lib.config import get_config, get_feature_flags
 from dashboard.lib.data import load_snapshot
 from dashboard.lib.linking import github_issue_url, github_pr_compare_url, serialize_state
 from dashboard.lib.remediation import get_remediation
+from dashboard.lib.scorecard import fetch_scorecard_result
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.trends import load_history
 
@@ -142,6 +143,34 @@ def render() -> None:
     st.text_input("Copy link to this view", value=f"https://share.streamlit.io/?{detail_query}", key="detail_share_link")
 
     st.plotly_chart(_metric_radar(repo_row), use_container_width=True)
+
+    if feature_flags.get("enable_scorecard_panel", False):
+        st.subheader("OpenSSF Scorecard parity")
+        try:
+            scorecard = fetch_scorecard_result(selected)
+        except Exception as exc:  # noqa: BLE001
+            scorecard = None
+            st.warning(f"Unable to fetch Scorecard data: {exc}")
+
+        if scorecard is None:
+            st.info("No public OpenSSF Scorecard result found for this repository.")
+        else:
+            m1, m2 = st.columns(2)
+            m1.metric("Scorecard score", f"{scorecard.score:.2f}" if scorecard.score is not None else "n/a")
+            m2.metric("Last scorecard date", scorecard.date or "n/a")
+
+            if scorecard.checks:
+                checks_df = pd.DataFrame(
+                    [
+                        {
+                            "check": item.name,
+                            "score": item.score,
+                            "reason": item.reason,
+                        }
+                        for item in scorecard.checks
+                    ]
+                )
+                st.dataframe(checks_df.sort_values("check"), use_container_width=True)
 
     check_cols = [
         col

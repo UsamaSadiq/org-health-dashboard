@@ -22,6 +22,10 @@ if flags.get("enable_sql_page", False):
     pages.append(st.Page("pages/07_sql.py", title="SQL", icon="🧮"))
 if flags.get("enable_badge_links", False):
     pages.append(st.Page("pages/08_badges.py", title="Badges", icon="🏷️"))
+if flags.get("enable_maintainer_views", True):
+    pages.append(st.Page("pages/09_ownership_views.py", title="Ownership", icon="👥"))
+if flags.get("enable_year_in_review_cards", False) or flags.get("enable_embeddable_score_cards", False):
+    pages.append(st.Page("pages/10_cards.py", title="Cards", icon="🖼️"))
 
 pages.append(st.Page("pages/99_healthz.py", title="Healthz", icon="🩺"))
 

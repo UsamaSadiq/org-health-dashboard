@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -106,16 +107,47 @@ def load_my_repos(handle: str) -> pd.DataFrame:
     if df.empty:
         return df
 
-    owner_cols = ["owner", "ownership.squad", "ownership.theme", "maintainers"]
-    handle_value = handle.strip()
+    handle_value = _normalize_handle(handle)
     if not handle_value:
         return pd.DataFrame()
 
     mask = pd.Series(False, index=df.index)
+
+    if REPO_COL in df.columns:
+        owner_series = df[REPO_COL].astype(str).str.split("/", n=1).str[0]
+        mask = mask | owner_series.map(lambda value: _normalize_handle(value) == handle_value)
+
+    owner_cols = [
+        "owner",
+        "maintainers",
+        "ownership.owner",
+        "ownership.owner_name",
+        "ownership.squad",
+        "ownership.theme",
+    ]
     for col in owner_cols:
         if col in df.columns:
-            mask = mask | df[col].astype(str).str.contains(handle_value, case=False, na=False)
+            mask = mask | df[col].map(lambda value: _value_matches_handle(value, handle_value))
+
     return df[mask]
+
+
+def _normalize_handle(value: object) -> str:
+    normalized = str(value or "").strip().lower()
+    return normalized.lstrip("@")
+
+
+def _value_matches_handle(value: object, handle: str) -> bool:
+    if not handle:
+        return False
+    text = _normalize_handle(value)
+    if not text:
+        return False
+    if text == handle:
+        return True
+
+    tokens = [token.lstrip("@") for token in re.split(r"[^a-zA-Z0-9_.-]+", text) if token]
+    return handle in tokens
 
 
 def load_config(name: str) -> dict[str, Any]:
