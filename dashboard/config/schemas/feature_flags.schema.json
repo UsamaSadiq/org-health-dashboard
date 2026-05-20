@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "enable_sql_page": {"type": "boolean"},
+    "enable_badge_links": {"type": "boolean"},
+    "enable_compare_mode": {"type": "boolean"},
+    "enable_pr_template_generator": {"type": "boolean"},
+    "enable_weekly_bulletin_export": {"type": "boolean"},
+    "enable_scorecard_panel": {"type": "boolean"},
+    "enable_ecosystems_enrichment": {"type": "boolean"},
+    "enable_maintainer_views": {"type": "boolean"},
+    "enable_my_repos_filter": {"type": "boolean"}
+  },
+  "additionalProperties": true
+}

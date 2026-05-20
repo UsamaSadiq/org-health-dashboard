@@ -1,10 +1,7 @@
-# Repository tier classifications
 critical:
-  - "edx-platform"
-  - "xblock"
+  - "openedx/edx-platform"
+  - "openedx/xblock"
 important:
-  - "forum"
-  - "ora"
-standard:
-  - "common-lib"
-  - "other-core-repos"
+  - "openedx/cs_comments_service"
+  - "openedx/edx-notes-api"
+standard: []

@@ -1,0 +1,64 @@
+checks:
+  dependabot.exists:
+    title: "Add Dependabot configuration"
+    description: "Dependabot keeps dependency versions fresh and security alerts visible."
+    source_url: "https://github.com/openedx/.github/blob/main/dependabot.yml"
+    snippet: |
+      version: 2
+      updates:
+        - package-ecosystem: "pip"
+          directory: "/"
+          schedule:
+            interval: "weekly"
+    applies_to_tiers: ["critical", "important", "standard"]
+    chaoss_metric: "Maintained"
+    scorecard_check: "Dependency-Update-Tool"
+    issue_body_template: |
+      This repository currently fails the `dependabot.exists` health check.
+
+      Proposed fix:
+      1. Add a `.github/dependabot.yml` file.
+      2. Start with weekly updates for pip/npm ecosystems used by this repo.
+
+      Filed via the Open edX Repository Health Dashboard ({dashboard_url}) - please review and edit before submitting.
+  exists.openedx.yaml:
+    title: "Add openedx.yaml"
+    description: "This metadata file is required for repository ownership and governance context."
+    source_url: "https://docs.openedx.org/"
+    snippet: |
+      owner: "team-name"
+      maintainers:
+        - github-handle
+      tags:
+        - openedx
+    applies_to_tiers: ["critical", "important", "standard"]
+    issue_body_template: |
+      This repository currently fails the `exists.openedx.yaml` health check.
+
+      Please add an `openedx.yaml` with ownership and maintainer metadata.
+
+      Filed via the Open edX Repository Health Dashboard ({dashboard_url}) - please review and edit before submitting.
+  github_actions:
+    title: "Enable GitHub Actions CI"
+    description: "Repositories should use GitHub Actions as the primary CI signal."
+    source_url: "https://github.com/openedx/.github/tree/master/.github/workflows"
+    snippet: |
+      name: CI
+      on:
+        pull_request:
+        push:
+          branches: [main]
+      jobs:
+        test:
+          runs-on: ubuntu-latest
+          steps:
+            - uses: actions/checkout@v4
+            - run: echo "Add your tests here"
+    applies_to_tiers: ["critical", "important", "standard"]
+    scorecard_check: "CI-Tests"
+    issue_body_template: |
+      This repository currently fails the `github_actions` health check.
+
+      Proposed fix is to add a baseline CI workflow under `.github/workflows`.
+
+      Filed via the Open edX Repository Health Dashboard ({dashboard_url}) - please review and edit before submitting.

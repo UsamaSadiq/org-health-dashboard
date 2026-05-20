@@ -1,0 +1,10 @@
+name: "Open edX Repository Health Dashboard"
+tagline: "Visualization-first health insights for Open edX repositories"
+colors:
+  primary: "#00262B"
+  accent: "#00B2A9"
+  danger: "#E22D2D"
+  success: "#166534"
+footer:
+  source_url: "https://github.com/UsamaSadiq/org-health-dashboard"
+  privacy_url: "https://github.com/UsamaSadiq/org-health-dashboard/blob/main/docs/PRIVACY.md"

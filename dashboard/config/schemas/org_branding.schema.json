@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "name": {"type": "string"},
+    "tagline": {"type": "string"},
+    "colors": {"type": "object"},
+    "footer": {"type": "object"}
+  },
+  "additionalProperties": true
+}

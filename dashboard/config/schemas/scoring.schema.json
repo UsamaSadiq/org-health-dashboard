@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["version", "letter_grades", "metrics"],
+  "properties": {
+    "version": {"type": "string"},
+    "letter_grades": {"type": "object"},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["weight", "column", "status"],
+        "properties": {
+          "weight": {"type": "number"},
+          "column": {"type": "string"},
+          "status": {"type": "string", "enum": ["computable", "unavailable"]},
+          "default_when_missing": {"type": "number"},
+          "parse_format": {"type": "string"},
+          "thresholds": {"type": "array"}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

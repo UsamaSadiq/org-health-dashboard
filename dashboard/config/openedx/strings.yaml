@@ -1,0 +1,21 @@
+overview:
+  title: "Overview"
+  kpi_total_repos: "Total Repos"
+  kpi_avg_score: "Average Score"
+  kpi_grade_a: "Grade A"
+  kpi_grade_f: "Grade F"
+repo_detail:
+  title: "Repository Detail"
+failing_checks:
+  title: "Failing Checks"
+needing_attention:
+  title: "Repos Needing Attention"
+what_changed:
+  title: "What Changed This Week"
+glossary:
+  title: "Glossary"
+common:
+  copy_link: "Copy link to this view"
+  show_table: "Show as table"
+  download_csv: "Download CSV"
+  download_json: "Download JSON"

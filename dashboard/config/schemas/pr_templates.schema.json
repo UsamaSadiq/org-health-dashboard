@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["whitelist", "templates"],
+  "properties": {
+    "whitelist": {"type": "array", "items": {"type": "string"}},
+    "templates": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "branch_prefix": {"type": "string"},
+          "title": {"type": "string"},
+          "body": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

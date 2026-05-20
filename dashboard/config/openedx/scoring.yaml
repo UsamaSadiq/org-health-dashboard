@@ -15,4 +15,51 @@ metrics:
     default_when_missing: 50
     status: "computable"
     chaoss_metric: "Code Changes"
-  # More metrics will be added following PRD Appendix A
+  pr_response_time:
+    weight: 0.15
+    column: "github.median_pr_response_seconds"
+    status: "unavailable"
+    default_when_missing: 50
+    chaoss_metric: "Issue Response Time"
+  pr_closure_ratio:
+    weight: 0.15
+    column: "github.pr_closure_ratio_90d"
+    status: "unavailable"
+    default_when_missing: 50
+    chaoss_metric: "Change Request Closure Ratio"
+  release_frequency:
+    weight: 0.10
+    column: "github.release_count_12mo"
+    status: "unavailable"
+    default_when_missing: 50
+    chaoss_metric: "Release Frequency"
+  contributor_absence_factor:
+    weight: 0.10
+    column: "github.contributor_count_90d"
+    status: "unavailable"
+    default_when_missing: 50
+    chaoss_metric: "Contributor Absence Factor"
+    aliases: ["Bus Factor", "Elephant Factor"]
+    scorecard_check: "Contributors"
+  readme_quality:
+    weight: 0.10
+    column: "readme.getting-help"
+    status: "computable"
+    default_when_missing: 50
+  ci_status:
+    weight: 0.10
+    column: "github_actions"
+    status: "computable"
+    default_when_missing: 50
+    scorecard_check: "CI-Tests"
+  openedx_yaml_compliance:
+    weight: 0.10
+    column: "exists.openedx.yaml"
+    status: "computable"
+    default_when_missing: 50
+  dependency_freshness:
+    weight: 0.05
+    column: "renovate.configured"
+    status: "computable"
+    default_when_missing: 50
+    scorecard_check: "Dependency-Update-Tool"

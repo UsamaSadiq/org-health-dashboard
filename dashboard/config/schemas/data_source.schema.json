@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["csv_url", "history_repo", "history_path"],
+  "properties": {
+    "csv_url": {"type": "string"},
+    "data_source_url": {"type": "string"},
+    "history_repo": {"type": "string"},
+    "history_path": {"type": "string"},
+    "history_days": {"type": "integer", "minimum": 1},
+    "cache_ttl_seconds": {"type": "integer", "minimum": 1},
+    "fallback_to_last_known_good": {"type": "boolean"},
+    "stale_threshold_hours": {"type": "integer", "minimum": 1},
+    "critically_stale_threshold_hours": {"type": "integer", "minimum": 1},
+    "expected_min_rows": {"type": "integer", "minimum": 1},
+    "expected_min_columns": {"type": "integer", "minimum": 1},
+    "repo_column": {"type": "string"},
+    "timestamp_column": {"type": "string"}
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["checks"],
+  "properties": {
+    "checks": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["title", "description", "source_url"],
+        "properties": {
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "source_url": {"type": "string"},
+          "snippet": {"type": "string"},
+          "applies_to_tiers": {"type": "array", "items": {"type": "string"}},
+          "chaoss_metric": {"type": "string"},
+          "scorecard_check": {"type": "string"},
+          "issue_body_template": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

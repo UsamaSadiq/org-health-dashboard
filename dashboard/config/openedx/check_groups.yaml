@@ -1,7 +1,20 @@
 groups:
-  - name: "Code Quality"
-    pattern: "code_quality\..*"
-    explicit: ["code_quality.readme_exists", "code_quality.docstrings"]
-  - name: "CI\ct"
-    pattern: "ci\..*"
-    explicit: ["ci.github_actions_configured"]
+  - name: "File Existence"
+    pattern: "^exists\\..*"
+  - name: "CI / Tooling"
+    explicit:
+      - github_actions
+      - renovate.configured
+      - travis_ci.active
+      - travis_yml.parsable
+      - tox_tox_section
+  - name: "Dependencies"
+    pattern: "^(dependabot\\..*|dependencies\\..*)"
+  - name: "Documentation"
+    explicit:
+      - readthedocs_config.exists
+      - docs.build_badge
+  - name: "README"
+    pattern: "^readme\\..*"
+  - name: "Ownership"
+    pattern: "^ownership\\..*"

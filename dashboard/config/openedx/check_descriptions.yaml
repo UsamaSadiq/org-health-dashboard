@@ -1,10 +1,22 @@
 checks:
   dependabot.exists:
+    title: "Dependabot Config"
     description: "Dependabot keeps dependencies updated and surfaces security advisories"
     source_url: "https://github.com/openedx/.github/blob/main/dependabot.yml"
     applies_to_tiers: ["critical", "important", "standard"]
     chaoss_metric: "Maintained"
+    scorecard_check: "Dependency-Update-Tool"
   exists.openedx.yaml:
+    title: "openedx.yaml"
     description: "Standard Open edX configuration file"
-    source_url: "https://github.com/openedx/configuration"  # Placeholder
+    source_url: "https://github.com/openedx/.github/tree/master/.github"
     applies_to_tiers: ["critical", "important"]
+  github_actions:
+    title: "GitHub Actions"
+    description: "Repository has modern CI configured via GitHub Actions."
+    source_url: "https://github.com/openedx/.github/tree/master/.github/workflows"
+    scorecard_check: "CI-Tests"
+  readthedocs_config.exists:
+    title: "Read the Docs Config"
+    description: "Repository has a Read the Docs configuration file."
+    source_url: "https://docs.readthedocs.com/platform/stable/config-file/v2.html"

@@ -2,7 +2,7 @@
 
 ![License](https://img.shields.io/badge/License-AGPL3.0-blue.svg) ![CLA](https://img.shields.io/badge/CLA-required-brightgreen.svg)
 
-The Open edX Repository Health Dashboard is a community tool that provides visualization and analytical capabilities for Open edX repository health metrics. This implementation follows the [v3 PRD document](docs/prD.md). The project is licensed under AGPL-3.0-or-later with CLA enforced via cla-assistant.
+The Open edX Repository Health Dashboard is a community tool that provides visualization and analytical capabilities for Open edX repository health metrics. This implementation follows the [v3 PRD document](docs/PRD.md). The project is licensed under AGPL-3.0-or-later with CLA enforced via cla-assistant.
 
 ## Key Features
 - 9-metric scoring system with CHAOSS and OpenSSF Scorecard integration
@@ -13,3 +13,15 @@ The Open edX Repository Health Dashboard is a community tool that provides visua
 
 ## Contributing
 Please review [CLA.md](CLA.md) before contributing.
+
+## PRD Status Tracking
+Phase 01 tracking source is [docs/prd_tasks_phase1.yaml](docs/prd_tasks_phase1.yaml).
+Regenerate status report with:
+
+python scripts/update_prd_status.py --generate-only
+
+Update one task and regenerate in one step with:
+
+python scripts/update_prd_status.py --set 3.1.8 done --notes "Implemented weekly deltas and bulletin export"
+
+Generated report: [docs/PRD_STATUS.md](docs/PRD_STATUS.md).

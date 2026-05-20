@@ -4,4 +4,6 @@ enable_compare_mode: true
 enable_pr_template_generator: true
 enable_weekly_bulletin_export: true
 enable_scorecard_panel: false
-enable_ecosysteems_enrichment: false
+enable_ecosystems_enrichment: false
+enable_maintainer_views: true
+enable_my_repos_filter: true
