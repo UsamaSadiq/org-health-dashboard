@@ -8,11 +8,13 @@ from rapidfuzz import fuzz
 
 from dashboard.lib.config import get_config, get_feature_flags
 from dashboard.lib.data import load_snapshot
-from dashboard.lib.linking import github_issue_url, github_pr_compare_url, serialize_state
+from dashboard.lib.linking import github_issue_url, github_pr_compare_url
 from dashboard.lib.remediation import get_remediation
 from dashboard.lib.scorecard import fetch_scorecard_result
 from dashboard.lib.scoring import calculate_scores
+from dashboard.lib.share import share_link
 from dashboard.lib.trends import load_history
+from dashboard.ui import share_link_block
 
 
 def _fuzzy_repo_options(repos: list[str], query: str) -> list[str]:
@@ -139,8 +141,10 @@ def render() -> None:
     c2.metric("Grade", repo_row["score_letter"])
     c3.metric("Scoring Config", str(repo_row.get("score_config_version", "unknown")))
 
-    detail_query = serialize_state({"tab": "detail", "repo": selected, "compare": compare_value})
-    st.text_input("Copy link to this view", value=f"https://share.streamlit.io/?{detail_query}", key="detail_share_link")
+    share_link_block(
+        share_link({"tab": "detail", "repo": selected, "compare": compare_value}),
+        label="Copy link to this view",
+    )
 
     st.plotly_chart(_metric_radar(repo_row), use_container_width=True)
 

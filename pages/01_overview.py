@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from urllib.parse import quote
 
 import pandas as pd
 import plotly.express as px
@@ -10,24 +9,12 @@ import streamlit as st
 from dashboard.lib.data import export_json_payload, load_config, load_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
-from dashboard.lib.linking import serialize_state
+from dashboard.lib.share import share_link
 from dashboard.lib.trends import load_history
+from dashboard.ui import render_sidebar_filters, share_link_block
 from dashboard.ui.banners import render_freshness_banner
 from dashboard.ui.kpi import render_kpi_strip
 from dashboard.ui.charts import grade_histogram
-
-
-def _filter_frame(df: pd.DataFrame, archived: bool, search: str, tier: str) -> pd.DataFrame:
-    filtered = df.copy()
-    if "github.is_archived" in filtered.columns and not archived:
-        filtered = filtered[filtered["github.is_archived"] != True]  # noqa: E712
-    if search:
-        filtered = filtered[
-            filtered["repo_name"].astype(str).str.contains(search, case=False, na=False)
-        ]
-    if tier and tier != "all" and "repo_tier" in filtered.columns:
-        filtered = filtered[filtered["repo_tier"] == tier]
-    return filtered
 
 
 def _category_pass_rates(frame: pd.DataFrame) -> pd.DataFrame:
@@ -97,11 +84,8 @@ def render() -> None:
 
     render_freshness_banner(snapshot_date, stale_hours, critical_hours)
 
-    search = st.text_input("Search repositories", value="", key="overview_search", help="Filter by repository name.")
-    archived = st.checkbox("Include archived", value=False, key="overview_archived")
-    tier = st.selectbox("Tier", options=["all", "critical", "important", "standard"], index=0)
-
-    working = _filter_frame(df, archived=archived, search=search, tier=tier)
+    filters = render_sidebar_filters()
+    working = filters.apply(df)
     if working.empty:
         st.warning("No repositories match the current filters.")
         return
@@ -152,14 +136,10 @@ def render() -> None:
 
     state = {
         "tab": "overview",
-        "search": search,
-        "archived": str(archived).lower(),
-        "tier": tier,
+        **filters.as_query_params(),
         "view": "table" if st.session_state.get("overview_table") else "charts",
     }
-    query = serialize_state(state)
-    share_url = f"https://share.streamlit.io/?{query}"
-    st.text_input("Copy link to this view", value=share_url, key="overview_share_link")
+    share_link_block(share_link(state), label="Copy link to this view")
 
     export_name = f"openedx-health-{datetime.now(timezone.utc).date().isoformat()}"
     csv_payload = ranked.to_csv(index=False).encode("utf-8")
@@ -179,7 +159,7 @@ def render() -> None:
 
     table_with_links = ranked.copy()
     table_with_links["repo_link"] = table_with_links["repo_name"].map(
-        lambda repo: f"https://share.streamlit.io/?tab=detail&repo={quote(str(repo), safe='')}"
+        lambda repo: share_link({"tab": "detail", "repo": str(repo)})
     )
     st.dataframe(
         table_with_links,

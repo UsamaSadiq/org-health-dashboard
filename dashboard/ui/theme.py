@@ -171,6 +171,12 @@ def grade_pill(grade: str) -> str:
     return f'<span class="grade-pill {cls}" aria-label="Grade {label}">{label}</span>'
 
 
+def share_link_block(url: str, *, label: str = "Share link") -> None:
+    """Render a share URL as a copyable code block instead of an editable input."""
+    st.markdown(f"**{label}**")
+    st.code(url, language="text")
+
+
 def status_chip(status: str, label: str | None = None) -> str:
     """Render a pill with color + text. Color is never the only signal."""
     key = (status or "").strip().lower()
