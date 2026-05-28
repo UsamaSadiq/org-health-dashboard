@@ -1321,3 +1321,98 @@ Quick references for tools named in this PRD.
 | GitHub URL-query reference (Issue pre-fill) | https://docs.github.com/en/issues/tracking-your-work-with-issues/creating-an-issue#creating-an-issue-from-a-url-query | Confirmed Issue-template query params. |
 
 ---
+
+## Appendix Z: UX iteration 2026-05 (diff)
+
+This appendix records the second UX pass after Phase 1 + Phase 2 shipped.
+It is a diff against the body of this PRD, not a rewrite. Sections 3 and
+4 of the body remain authoritative for everything not listed here.
+
+### What changed
+
+**Information architecture (§3 supplement)**
+
+- Navigation is now grouped into four sections: **Health** (Overview, Repo
+  Detail, Failing Checks, Needing Attention, What Changed), **Ownership**,
+  **Tools** (SQL, Badges, Cards — each gated by feature flag), **Meta**
+  (Glossary, Healthz). Implemented via `st.navigation(sections_dict)`.
+- Filters (`search`, `include_archived`, `tier`) are a single shared
+  sidebar component (`dashboard/ui/filters.py`). State persists across
+  pages in `st.session_state` and is seeded from URL query params on
+  first render via `hydrate_from_query_params()`.
+- Page-body filter widgets removed from Overview, Repo Detail, and
+  Needing Attention. Each page now picks up the shared `FilterState`.
+
+**Visual system (§4.2 supplement)**
+
+- Design tokens consolidated in `dashboard/ui/theme.py`. Palette:
+  primary `#0F4C5C`, accent `#14B8A6`, pass `#15803D`, warn `#D97706`,
+  fail `#B91C1C`. WCAG AA against `SURFACE` `#F8FAFC`; pass/fail
+  verified against deuteranopia, protanopia, and tritanopia simulators
+  when paired with status text labels.
+- Plotly figures use the registered `openedx_health` template — no
+  page-level template overrides allowed.
+- Status is never communicated by color alone. `status_chip()` and
+  `grade_pill()` always include the label/letter text.
+- `:focus-visible` outline (accent color, 2px, 2px offset) added.
+- `@media (prefers-reduced-motion: reduce)` block disables transitions
+  and animations org-wide.
+
+**Overview (§3.1.1 / 3.1.2 supplement)**
+
+- Page restructured into five bands: header → KPI strip → three-tab
+  primary chart (Grade distribution / Per-category pass rate / Top
+  failing checks) → highlights (Top 5 / Bottom 5 / 30d gainers / losers)
+  → collapsed full table → collapsed share & export.
+- KPI tiles now render deltas vs. the earliest snapshot in the last 7
+  days, with inverse-color delta on Grade F (more failures = red).
+- Top 5 / Bottom 5 use an inline pill list (color + grade letter)
+  instead of a plain dataframe.
+
+**Repo Detail (§3.1.3 supplement)**
+
+- Primary surface is now a 3-column grid of bordered **category cards**
+  (File Existence, CI / Tooling, Dependencies, Documentation, README).
+  Each card carries a pass-rate chip, pass/fail/N/A counts, and a 30-day
+  sparkline.
+- Per-check expanders are gated behind a filter chip group
+  (`Failing only` / `All` / `Passing` / `Unknown`, default `Failing only`)
+  and a category selector. The page shows "N of M checks shown".
+- **Compare mode** replaces the prior 4-row dataframe with side-by-side
+  category cards, delta badges (pass count: higher-is-better, fail count:
+  lower-is-better), and a two-trace radar overlay.
+
+**Share URLs and deployment (§3.1.4 supplement)**
+
+- `dashboard.lib.share.base_url()` reads `DASHBOARD_BASE_URL` from the
+  environment; falls back to the Streamlit Community Cloud URL. All
+  previously hardcoded `https://share.streamlit.io/` literals are routed
+  through `share_link(params)`.
+- Share URLs render as a copyable `st.code` block (`share_link_block`)
+  rather than an editable text input.
+
+**Performance**
+
+- `_history_for_repo` in Repo Detail is now `@st.cache_data(ttl=600)`.
+  Previously `load_history()` was called once per category card per
+  render (5× per repo view). Cold path unchanged; warm path is one
+  fetch per repo per 10-minute window.
+
+### What did not change
+
+- The 9-metric scoring spec (Appendix A), column dependency matrix
+  (Appendix B), data-source URL, refresh cadence, and Phase 2 feature-
+  flag inventory are unchanged.
+- WCAG 2.2 AA target, browser support, and security posture (§4) remain
+  authoritative.
+
+### File map
+
+| Concern                | File                                  |
+|------------------------|---------------------------------------|
+| Design tokens + CSS    | `dashboard/ui/theme.py`               |
+| Shared sidebar filters | `dashboard/ui/filters.py`             |
+| Chart factories        | `dashboard/ui/charts.py`              |
+| KPI strip with deltas  | `dashboard/ui/kpi.py`                 |
+| Deploy-aware URL helper| `dashboard/lib/share.py`              |
+| Component catalog      | `dashboard/ui/README.md`              |
