@@ -6,8 +6,9 @@ import streamlit as st
 
 from dashboard.lib.bulletin import generate_weekly_bulletin
 from dashboard.lib.config import get_feature_flags
-from dashboard.lib.linking import serialize_state
+from dashboard.lib.share import base_url, share_link
 from dashboard.lib.trends import load_history, summarize_weekly_changes
+from dashboard.ui import share_link_block
 
 
 def render() -> None:
@@ -43,7 +44,7 @@ def render() -> None:
         bulletin = generate_weekly_bulletin(
             changes["new_failures"],
             changes["new_passes"],
-            dashboard_url="https://share.streamlit.io",
+            dashboard_url=base_url().rstrip("/"),
             commit_sha=commit_sha,
         )
         st.subheader("Weekly bulletin export")
@@ -55,11 +56,7 @@ def render() -> None:
             mime="text/markdown",
         )
 
-    st.text_input(
-        "Copy link to this view",
-        value=f"https://share.streamlit.io/?{serialize_state({'tab': 'what-changed'})}",
-        key="changes_share_link",
-    )
+    share_link_block(share_link({"tab": "what-changed"}), label="Copy link to this view")
 
 
 render()

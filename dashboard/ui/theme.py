@@ -171,6 +171,32 @@ def grade_pill(grade: str) -> str:
     return f'<span class="grade-pill {cls}" aria-label="Grade {label}">{label}</span>'
 
 
+def render_repo_pill_list(rows: list[tuple[str, float, str]], *, link_fn=None) -> None:
+    """Render a small ranked repo list with grade pills inline.
+
+    `rows` is an iterable of (repo_name, score, grade_letter). If `link_fn` is
+    provided, repo names are wrapped in markdown links to `link_fn(repo)`.
+    """
+    if not rows:
+        st.caption("No repositories.")
+        return
+    lines = []
+    for repo, score, grade in rows:
+        label = f"[{repo}]({link_fn(repo)})" if link_fn else repo
+        score_text = f"{score:.1f}" if isinstance(score, (int, float)) else str(score)
+        lines.append(
+            f'<li style="display:flex;justify-content:space-between;align-items:center;'
+            f'padding:6px 0;border-bottom:1px solid var(--color-border);">'
+            f'<span>{label}</span>'
+            f'<span>{grade_pill(grade)} <span class="small-muted">{score_text}</span></span>'
+            f'</li>'
+        )
+    st.markdown(
+        f'<ul style="list-style:none;padding-left:0;margin:0;">{"".join(lines)}</ul>',
+        unsafe_allow_html=True,
+    )
+
+
 def share_link_block(url: str, *, label: str = "Share link") -> None:
     """Render a share URL as a copyable code block instead of an editable input."""
     st.markdown(f"**{label}**")
