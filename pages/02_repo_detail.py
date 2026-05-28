@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from rapidfuzz import fuzz
@@ -12,9 +11,22 @@ from dashboard.lib.linking import github_issue_url, github_pr_compare_url
 from dashboard.lib.remediation import get_remediation
 from dashboard.lib.scorecard import fetch_scorecard_result
 from dashboard.lib.scoring import calculate_scores
-from dashboard.lib.share import share_link
+from dashboard.lib.share import base_url, share_link
 from dashboard.lib.trends import load_history
-from dashboard.ui import share_link_block
+from dashboard.ui import grade_pill, share_link_block, status_chip
+from dashboard.ui.charts import sparkline
+
+
+CATEGORY_GROUPS: dict[str, callable] = {
+    "File Existence": lambda c: c.startswith("exists."),
+    "CI / Tooling": lambda c: c in {"github_actions", "renovate.configured", "travis_ci.active", "travis_yml.parsable", "tox_tox_section"},
+    "Dependencies": lambda c: c.startswith("dependabot.") or c.startswith("dependencies."),
+    "Documentation": lambda c: c in {"readthedocs_config.exists", "docs.build_badge"},
+    "README": lambda c: c.startswith("readme."),
+}
+
+PASS_TOKENS = {"true", "1", "yes"}
+FAIL_TOKENS = {"false", "0", "no", "fail", "failing"}
 
 
 def _fuzzy_repo_options(repos: list[str], query: str) -> list[str]:
@@ -24,42 +36,43 @@ def _fuzzy_repo_options(repos: list[str], query: str) -> list[str]:
     return ranked[:30]
 
 
-@st.dialog("Raw check output")
-def _raw_check_dialog(check_name: str, value: object) -> None:
-    st.write(f"Check: {check_name}")
-    st.code(str(value), language="text")
+def _classify(value: object) -> str:
+    token = str(value).strip().lower()
+    if token in PASS_TOKENS:
+        return "pass"
+    if token in FAIL_TOKENS:
+        return "fail"
+    return "unknown"
 
 
-def _category_map(columns: list[str]) -> dict[str, list[str]]:
-    return {
-        "File Existence": [c for c in columns if c.startswith("exists.")],
-        "CI / Tooling": [c for c in columns if c in {"github_actions", "renovate.configured", "travis_ci.active", "travis_yml.parsable", "tox_tox_section"}],
-        "Dependencies": [c for c in columns if c.startswith("dependabot.") or c.startswith("dependencies.")],
-        "Documentation": [c for c in columns if c in {"readthedocs_config.exists", "docs.build_badge"}],
-        "README": [c for c in columns if c.startswith("readme.")],
-    }
+def _category_columns(df: pd.DataFrame) -> dict[str, list[str]]:
+    columns = [
+        col for col in df.columns
+        if "." in col and not col.startswith("github.") and not col.startswith("language_bytes.")
+    ]
+    return {name: [c for c in columns if predicate(c)] for name, predicate in CATEGORY_GROUPS.items()}
 
 
 def _category_stats(row: pd.Series, category_cols: list[str]) -> tuple[int, int, int]:
     pass_count = fail_count = na_count = 0
     for col in category_cols:
-        value = str(row.get(col, "")).strip().lower()
-        if value in {"true", "1", "yes"}:
+        bucket = _classify(row.get(col, ""))
+        if bucket == "pass":
             pass_count += 1
-        elif value in {"false", "0", "no", "fail", "failing"}:
+        elif bucket == "fail":
             fail_count += 1
         else:
             na_count += 1
     return pass_count, fail_count, na_count
 
 
-def _repo_sparkline(repo: str, cols: list[str]) -> pd.DataFrame:
+@st.cache_data(ttl=600, show_spinner=False)
+def _history_for_repo(repo: str) -> list[dict]:
     try:
         history = load_history(days=30)
     except Exception:
-        return pd.DataFrame()
-
-    points = []
+        return []
+    out = []
     for snapshot in history:
         frame = snapshot.df
         if "repo_name" not in frame.columns:
@@ -67,44 +80,152 @@ def _repo_sparkline(repo: str, cols: list[str]) -> pd.DataFrame:
         subset = frame[frame["repo_name"] == repo]
         if subset.empty:
             continue
-        row = subset.iloc[0]
-        pass_count, fail_count, _ = _category_stats(row, cols)
+        out.append({"date": snapshot.timestamp, "row": subset.iloc[0]})
+    return out
+
+
+def _repo_sparkline(repo: str, cols: list[str]) -> pd.DataFrame:
+    points = []
+    for entry in _history_for_repo(repo):
+        pass_count, fail_count, _ = _category_stats(entry["row"], cols)
         total = pass_count + fail_count
-        pass_rate = (pass_count / total) * 100 if total else 0
-        points.append({"date": snapshot.timestamp, "pass_rate": round(pass_rate, 2)})
+        if total == 0:
+            continue
+        points.append({"date": entry["date"], "pass_rate": round((pass_count / total) * 100, 2)})
     return pd.DataFrame(points)
 
 
-def _metric_radar(repo_row: pd.Series) -> go.Figure:
+def _metric_radar(repo_row: pd.Series, *, compare_row: pd.Series | None = None, compare_label: str = "") -> go.Figure:
     per_metric = repo_row.get("score_per_metric", {}) or {}
     unavailable = set(repo_row.get("score_unavailable_metrics", []) or [])
-
     labels = list(per_metric.keys()) + [name for name in unavailable if name not in per_metric]
     if not labels:
         labels = ["no_metrics"]
 
     values = [per_metric.get(label, 100.0 if label in unavailable else 0.0) for label in labels]
     fig = go.Figure()
-    fig.add_trace(
-        go.Scatterpolar(
-            r=values,
-            theta=labels,
-            fill="toself",
-            name="Metric score",
-        )
-    )
-    if unavailable:
-        fig.add_trace(
-            go.Scatterpolar(
-                r=[100 if label in unavailable else 0 for label in labels],
-                theta=labels,
-                mode="lines",
-                line={"dash": "dot", "color": "#9ca3af"},
-                name="Unavailable metric",
-            )
-        )
+    fig.add_trace(go.Scatterpolar(r=values, theta=labels, fill="toself", name=str(repo_row.get("repo_name", "Selected"))))
+
+    if compare_row is not None:
+        compare_metrics = compare_row.get("score_per_metric", {}) or {}
+        compare_values = [compare_metrics.get(label, 0.0) for label in labels]
+        fig.add_trace(go.Scatterpolar(r=compare_values, theta=labels, fill="toself", name=compare_label or "Compare", opacity=0.5))
+
     fig.update_layout(polar={"radialaxis": {"visible": True, "range": [0, 100]}}, showlegend=True)
     return fig
+
+
+def _category_card(category: str, repo: str, row: pd.Series, cols: list[str], *, key_prefix: str) -> dict[str, int]:
+    pass_count, fail_count, na_count = _category_stats(row, cols)
+    total = pass_count + fail_count
+    pass_rate = (pass_count / total) * 100 if total else 0
+    with st.container(border=True):
+        head_left, head_right = st.columns([3, 2])
+        with head_left:
+            st.markdown(f"**{category}**")
+        with head_right:
+            chip = (
+                status_chip("pass", f"{pass_rate:.0f}% pass")
+                if pass_rate >= 80
+                else status_chip("warn", f"{pass_rate:.0f}% pass")
+                if pass_rate >= 50
+                else status_chip("fail", f"{pass_rate:.0f}% pass")
+                if total > 0
+                else status_chip("unknown", "no data")
+            )
+            st.markdown(f"<div style='text-align:right'>{chip}</div>", unsafe_allow_html=True)
+        st.caption(f"Pass {pass_count} · Fail {fail_count} · N/A {na_count}")
+        spark = _repo_sparkline(repo, cols)
+        if not spark.empty and len(spark) >= 2:
+            st.plotly_chart(sparkline(spark), use_container_width=True, key=f"spark-{key_prefix}-{category}")
+    return {"pass": pass_count, "fail": fail_count, "na": na_count}
+
+
+def _delta_badge(current: int, baseline: int, *, lower_is_better: bool = False) -> str:
+    delta = current - baseline
+    if delta == 0:
+        return status_chip("unknown", "—")
+    sign = "+" if delta > 0 else ""
+    improving = (delta < 0) if lower_is_better else (delta > 0)
+    return status_chip("pass" if improving else "fail", f"{sign}{delta}")
+
+
+def _render_compare_panel(left_row: pd.Series, right_row: pd.Series, df: pd.DataFrame) -> None:
+    st.subheader("Side-by-side comparison")
+    left_name = str(left_row["repo_name"])
+    right_name = str(right_row["repo_name"])
+
+    head_left, head_right = st.columns(2)
+    with head_left:
+        st.markdown(f"#### {left_name}")
+        st.markdown(grade_pill(str(left_row.get("score_letter", ""))) + f" &nbsp; **{left_row.get('score_composite', 0):.1f}**", unsafe_allow_html=True)
+    with head_right:
+        st.markdown(f"#### {right_name}")
+        st.markdown(grade_pill(str(right_row.get("score_letter", ""))) + f" &nbsp; **{right_row.get('score_composite', 0):.1f}**", unsafe_allow_html=True)
+
+    st.plotly_chart(
+        _metric_radar(left_row, compare_row=right_row, compare_label=right_name),
+        use_container_width=True,
+        key=f"compare-radar-{left_name}-{right_name}",
+    )
+
+    categories = _category_columns(df)
+    for category, cols in categories.items():
+        if not cols:
+            continue
+        col_left, col_mid, col_right = st.columns([5, 2, 5])
+        with col_left:
+            left_stats = _category_card(category, left_name, left_row, cols, key_prefix=f"L-{left_name}")
+        with col_right:
+            right_stats = _category_card(category, right_name, right_row, cols, key_prefix=f"R-{right_name}")
+        with col_mid:
+            st.markdown("<div style='text-align:center; padding-top: 16px'>", unsafe_allow_html=True)
+            st.markdown(f"Pass {_delta_badge(left_stats['pass'], right_stats['pass'])}", unsafe_allow_html=True)
+            st.markdown(f"Fail {_delta_badge(left_stats['fail'], right_stats['fail'], lower_is_better=True)}", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _render_check_expander(check: str, repo_row: pd.Series, selected_repo: str, *, descriptions: dict, pr_cfg: dict, feature_flags: dict, whitelisted: set[str]) -> None:
+    value = repo_row.get(check)
+    bucket = _classify(value)
+    label_chip = status_chip(bucket, bucket.upper())
+    short_desc = descriptions.get(check, {}).get("description", "No description available.")
+    header_label = f"{check}"
+
+    with st.expander(header_label, expanded=False):
+        st.markdown(label_chip, unsafe_allow_html=True)
+        st.caption(short_desc)
+        st.code(f"value = {value!r}", language="python")
+
+        remediation = get_remediation(check)
+        if bucket == "fail" and remediation:
+            st.markdown("**Remediation**")
+            st.write(remediation.description)
+            if remediation.snippet:
+                st.code(remediation.snippet, language="yaml")
+            if remediation.source_url:
+                st.markdown(f"[Source]({remediation.source_url})")
+
+            issue_body_template = remediation.issue_body_template or (
+                "This repository fails a health check and needs remediation.\n\n"
+                "Filed via the Open edX Repository Health Dashboard ({dashboard_url}) - "
+                "please review and edit before submitting."
+            )
+            issue_url = github_issue_url(
+                selected_repo,
+                check,
+                issue_body_template.replace("{dashboard_url}", base_url().rstrip("/")),
+            )
+            action_left, action_right = st.columns(2)
+            action_left.link_button("File issue on this repo", issue_url)
+
+            if feature_flags.get("enable_pr_template_generator", True) and check in whitelisted:
+                template = pr_cfg.get("templates", {}).get(check, {})
+                branch = template.get("branch_prefix", f"chore/{check.replace('.', '-')}")
+                title = template.get("title", f"chore: fix {check}")
+                body = template.get("body", "Generated by dashboard - please review carefully.")
+                pr_url = github_pr_compare_url(selected_repo, branch, title, body)
+                action_right.link_button("Open PR with fix", pr_url)
 
 
 def render() -> None:
@@ -120,151 +241,131 @@ def render() -> None:
     query_repo = str(st.query_params.get("repo", ""))
     query_compare = str(st.query_params.get("compare", ""))
 
-    search = st.text_input("Find repository", value=query_repo or "", key="detail_search")
-    options = _fuzzy_repo_options(repos, search)
-    selected = st.selectbox("Repository", options=options, index=0 if options else None)
+    # ----------------------------------------------------------------- header
+    pick_left, pick_right = st.columns([3, 3])
+    with pick_left:
+        search = st.text_input("Find repository", value=query_repo or "", key="detail_search", placeholder="fuzzy match…")
+        options = _fuzzy_repo_options(repos, search)
+        selected = st.selectbox("Repository", options=options, index=0 if options else None, key="detail_selected")
     compare_value = ""
+    with pick_right:
+        if feature_flags.get("enable_compare_mode", True):
+            compare_options = [""] + [repo for repo in repos if repo != selected]
+            compare_index = compare_options.index(query_compare) if query_compare in compare_options else 0
+            compare_value = st.selectbox("Compare with", options=compare_options, index=compare_index, key="detail_compare")
 
-    if feature_flags.get("enable_compare_mode", True):
-        compare_options = [""] + [repo for repo in repos if repo != selected]
-        compare_index = compare_options.index(query_compare) if query_compare in compare_options else 0
-        compare_value = st.selectbox(
-            "Compare with",
-            options=compare_options,
-            index=compare_index,
-        )
+    if not selected:
+        st.info("Pick a repository to see its detail.")
+        return
 
     repo_row = df[df["repo_name"] == selected].iloc[0]
-    st.subheader(selected)
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Composite Score", f"{repo_row['score_composite']:.1f}")
-    c2.metric("Grade", repo_row["score_letter"])
-    c3.metric("Scoring Config", str(repo_row.get("score_config_version", "unknown")))
+
+    # --------------------------------------------------------- repo summary
+    st.markdown(
+        f"## {selected} &nbsp; {grade_pill(str(repo_row.get('score_letter', '')))}",
+        unsafe_allow_html=True,
+    )
+    sum_a, sum_b, sum_c = st.columns(3)
+    sum_a.metric("Composite score", f"{repo_row['score_composite']:.1f}")
+    sum_b.metric("Grade", repo_row["score_letter"])
+    sum_c.metric("Scoring config", str(repo_row.get("score_config_version", "unknown")))
 
     share_link_block(
         share_link({"tab": "detail", "repo": selected, "compare": compare_value}),
         label="Copy link to this view",
     )
 
-    st.plotly_chart(_metric_radar(repo_row), use_container_width=True)
+    # ------------------------------------------------------- compare mode
+    if compare_value:
+        compare_row = df[df["repo_name"] == compare_value]
+        if not compare_row.empty:
+            _render_compare_panel(repo_row, compare_row.iloc[0], df)
+            return
+
+    # ------------------------------------------------------- single-repo view
+    st.plotly_chart(_metric_radar(repo_row), use_container_width=True, key=f"radar-{selected}")
 
     if feature_flags.get("enable_scorecard_panel", False):
-        st.subheader("OpenSSF Scorecard parity")
-        try:
-            scorecard = fetch_scorecard_result(selected)
-        except Exception as exc:  # noqa: BLE001
-            scorecard = None
-            st.warning(f"Unable to fetch Scorecard data: {exc}")
+        with st.expander("OpenSSF Scorecard parity", expanded=False):
+            try:
+                scorecard = fetch_scorecard_result(selected)
+            except Exception as exc:  # noqa: BLE001
+                scorecard = None
+                st.warning(f"Unable to fetch Scorecard data: {exc}")
+            if scorecard is None:
+                st.info("No public OpenSSF Scorecard result found for this repository.")
+            else:
+                m1, m2 = st.columns(2)
+                m1.metric("Scorecard score", f"{scorecard.score:.2f}" if scorecard.score is not None else "n/a")
+                m2.metric("Last scorecard date", scorecard.date or "n/a")
+                if scorecard.checks:
+                    checks_df = pd.DataFrame(
+                        [{"check": item.name, "score": item.score, "reason": item.reason} for item in scorecard.checks]
+                    )
+                    st.dataframe(checks_df.sort_values("check"), use_container_width=True, hide_index=True)
 
-        if scorecard is None:
-            st.info("No public OpenSSF Scorecard result found for this repository.")
-        else:
-            m1, m2 = st.columns(2)
-            m1.metric("Scorecard score", f"{scorecard.score:.2f}" if scorecard.score is not None else "n/a")
-            m2.metric("Last scorecard date", scorecard.date or "n/a")
-
-            if scorecard.checks:
-                checks_df = pd.DataFrame(
-                    [
-                        {
-                            "check": item.name,
-                            "score": item.score,
-                            "reason": item.reason,
-                        }
-                        for item in scorecard.checks
-                    ]
-                )
-                st.dataframe(checks_df.sort_values("check"), use_container_width=True)
-
-    check_cols = [
-        col
-        for col in df.columns
-        if "." in col and not col.startswith("github.") and not col.startswith("language_bytes.")
-    ]
-    categories = _category_map(check_cols)
-
-    st.subheader("Per-category mini cards")
-    card_cols = st.columns(max(1, len(categories)))
+    # ----------------------------------------------------- category cards
+    st.subheader("Category overview")
+    categories = _category_columns(df)
+    grid_cols = st.columns(min(3, max(1, len(categories))))
     for idx, (category, cols) in enumerate(categories.items()):
-        usable = [col for col in cols if col in df.columns]
-        pass_count, fail_count, na_count = _category_stats(repo_row, usable)
-        with card_cols[idx]:
-            st.markdown(f"**{category}**")
-            st.caption(f"Pass: {pass_count} | Fail: {fail_count} | N/A: {na_count}")
-            spark = _repo_sparkline(selected, usable)
-            if not spark.empty:
-                st.plotly_chart(px.line(spark, x="date", y="pass_rate", title="30-day sparkline"), use_container_width=True)
+        if not cols:
+            continue
+        with grid_cols[idx % len(grid_cols)]:
+            _category_card(category, selected, repo_row, cols, key_prefix=selected)
+
+    # ----------------------------------------------------- check drilldown
+    check_cols = [c for cols in categories.values() for c in cols]
+    if not check_cols:
+        return
+
+    st.subheader("Checks")
+    control_left, control_right = st.columns([3, 2])
+    with control_left:
+        filter_choice = st.radio(
+            "Filter",
+            options=["Failing only", "All", "Passing", "Unknown"],
+            horizontal=True,
+            index=0,
+            key="detail_filter",
+        )
+    with control_right:
+        category_choice = st.selectbox(
+            "Category",
+            options=["All"] + [c for c, cols in categories.items() if cols],
+            index=0,
+            key="detail_category",
+        )
 
     descriptions = get_config("check_descriptions").get("checks", {})
     pr_cfg = get_config("pr_templates")
     whitelisted = set(pr_cfg.get("whitelist", []))
 
+    bucket_for_choice = {"Failing only": "fail", "Passing": "pass", "Unknown": "unknown"}.get(filter_choice)
+    visible_checks = []
     for check in sorted(check_cols):
-        value = repo_row.get(check)
-        failed = str(value).strip().lower() in {"false", "0", "no", "fail", "failing"}
-        status = "FAIL" if failed else "PASS"
-        short_desc = descriptions.get(check, {}).get("description", "No description available.")
-        with st.expander(f"{check} - {status}", expanded=False):
-            st.caption(short_desc)
-            st.write(f"Status value: {value}")
-            if st.button("View raw check output", key=f"raw-{selected}-{check}"):
-                _raw_check_dialog(check, value)
+        if category_choice != "All":
+            if check not in categories[category_choice]:
+                continue
+        if bucket_for_choice and _classify(repo_row.get(check)) != bucket_for_choice:
+            continue
+        visible_checks.append(check)
 
-            remediation = get_remediation(check)
-            if failed and remediation:
-                with st.expander("Show remediation", expanded=False):
-                    st.write(remediation.description)
-                    if remediation.snippet:
-                        st.code(remediation.snippet, language="yaml")
-                        st.text_area("Copy snippet", remediation.snippet, height=120, key=f"snippet-{selected}-{check}")
-                    if remediation.source_url:
-                        st.markdown(f"Source: {remediation.source_url}")
+    st.caption(f"{len(visible_checks)} of {len(check_cols)} checks shown.")
+    if not visible_checks:
+        st.success("Nothing to show for the current filter.")
+        return
 
-                issue_body_template = remediation.issue_body_template or (
-                    "This repository fails a health check and needs remediation.\n\n"
-                    "Filed via the Open edX Repository Health Dashboard ({dashboard_url}) - "
-                    "please review and edit before submitting."
-                )
-                issue_url = github_issue_url(
-                    selected,
-                    check,
-                    issue_body_template.replace("{dashboard_url}", "https://share.streamlit.io"),
-                )
-                st.link_button("File issue on this repo", issue_url)
-
-                if feature_flags.get("enable_pr_template_generator", True) and check in whitelisted:
-                    template = pr_cfg.get("templates", {}).get(check, {})
-                    branch = template.get("branch_prefix", f"chore/{check.replace('.', '-')}")
-                    title = template.get("title", f"chore: fix {check}")
-                    body = template.get(
-                        "body",
-                        "Generated by dashboard - please review carefully.",
-                    )
-                    pr_url = github_pr_compare_url(selected, branch, title, body)
-                    st.link_button("Open PR with fix", pr_url)
-
-    if compare_value:
-        compare_row = df[df["repo_name"] == compare_value]
-        if not compare_row.empty:
-            st.subheader("Comparison")
-            merged = pd.DataFrame(
-                {
-                    "metric": ["score_composite", "score_letter", "github.last_push", "github.pulls_count"],
-                    selected: [
-                        repo_row.get("score_composite"),
-                        repo_row.get("score_letter"),
-                        repo_row.get("github.last_push"),
-                        repo_row.get("github.pulls_count"),
-                    ],
-                    compare_value: [
-                        compare_row.iloc[0].get("score_composite"),
-                        compare_row.iloc[0].get("score_letter"),
-                        compare_row.iloc[0].get("github.last_push"),
-                        compare_row.iloc[0].get("github.pulls_count"),
-                    ],
-                }
-            )
-            st.dataframe(merged, use_container_width=True)
+    for check in visible_checks:
+        _render_check_expander(
+            check,
+            repo_row,
+            selected,
+            descriptions=descriptions,
+            pr_cfg=pr_cfg,
+            feature_flags=feature_flags,
+            whitelisted=whitelisted,
+        )
 
 
 render()
