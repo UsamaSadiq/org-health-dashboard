@@ -10,7 +10,7 @@ from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
 from dashboard.lib.share import share_link
 from dashboard.lib.trends import load_history
-from dashboard.ui import render_sidebar_filters, share_link_block
+from dashboard.ui import render_repo_pill_list, render_sidebar_filters, share_link_block
 from dashboard.ui.banners import render_freshness_banner
 from dashboard.ui.charts import category_pass_rate_bar, grade_histogram, top_failing_bar
 from dashboard.ui.kpi import render_kpi_strip
@@ -148,13 +148,25 @@ def render() -> None:
     )
 
     st.subheader("Highlights")
+
+    def _repo_link(repo: str) -> str:
+        return share_link({"tab": "detail", "repo": repo})
+
+    top_rows = [
+        (str(r.repo_name), float(r.score_composite), str(r.score_letter))
+        for r in ranked.head(5).itertuples(index=False)
+    ]
+    bottom_rows = [
+        (str(r.repo_name), float(r.score_composite), str(r.score_letter))
+        for r in ranked.tail(5).iloc[::-1].itertuples(index=False)
+    ]
     hi_left, hi_right = st.columns(2)
     with hi_left:
         st.markdown("**Top 5**")
-        st.dataframe(ranked.head(5), use_container_width=True, hide_index=True)
+        render_repo_pill_list(top_rows, link_fn=_repo_link)
     with hi_right:
         st.markdown("**Bottom 5**")
-        st.dataframe(ranked.tail(5).iloc[::-1], use_container_width=True, hide_index=True)
+        render_repo_pill_list(bottom_rows, link_fn=_repo_link)
 
     movers = _top_movers(working)
     if not movers.empty:
