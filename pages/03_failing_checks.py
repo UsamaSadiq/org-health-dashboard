@@ -3,11 +3,11 @@ from __future__ import annotations
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from urllib.parse import quote
 
 from dashboard.lib.data import load_snapshot
-from dashboard.lib.linking import serialize_state
 from dashboard.lib.scoring import calculate_scores
+from dashboard.lib.share import share_link
+from dashboard.ui import share_link_block
 
 
 def render() -> None:
@@ -72,15 +72,17 @@ def render() -> None:
     result = filtered[["repo_name", "score_composite", "score_letter"]].sort_values("score_composite")
     result = result.copy()
     result["repo_link"] = result["repo_name"].map(
-        lambda repo: f"https://share.streamlit.io/?tab=detail&repo={quote(str(repo), safe='')}"
+        lambda repo: share_link({"tab": "detail", "repo": str(repo)})
     )
     st.dataframe(
         result,
         use_container_width=True,
         column_config={"repo_link": st.column_config.LinkColumn("Repo Detail Link")},
     )
-    share_query = serialize_state({"tab": "failing-checks", "category": selected_check or ""})
-    st.text_input("Copy link to this view", value=f"https://share.streamlit.io/?{share_query}", key="failing_share_link")
+    share_link_block(
+        share_link({"tab": "failing-checks", "category": selected_check or ""}),
+        label="Copy link to this view",
+    )
 
 
 render()
