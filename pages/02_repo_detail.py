@@ -10,7 +10,7 @@ from dashboard.lib.data import load_snapshot
 from dashboard.lib.linking import github_issue_url, github_pr_compare_url
 from dashboard.lib.remediation import get_remediation
 from dashboard.lib.scorecard import fetch_scorecard_result
-from dashboard.lib.scoring import calculate_scores
+from dashboard.lib.scoring import calculate_scores, pair_restricted_composite
 from dashboard.lib.share import base_url, share_link
 from dashboard.lib.trends import load_history
 from dashboard.ui import grade_pill, share_link_block, status_chip
@@ -155,13 +155,40 @@ def _render_compare_panel(left_row: pd.Series, right_row: pd.Series, df: pd.Data
     left_name = str(left_row["repo_name"])
     right_name = str(right_row["repo_name"])
 
+    pair = pair_restricted_composite(left_row, right_row)
+    shared_count = len(pair["metrics"])
+    own_count_left = len(left_row.get("score_per_metric", {}) or {})
+    own_count_right = len(right_row.get("score_per_metric", {}) or {})
+
     head_left, head_right = st.columns(2)
     with head_left:
         st.markdown(f"#### {left_name}")
-        st.markdown(grade_pill(str(left_row.get("score_letter", ""))) + f" &nbsp; **{left_row.get('score_composite', 0):.1f}**", unsafe_allow_html=True)
+        st.markdown(
+            grade_pill(str(left_row.get("score_letter", "")))
+            + f" &nbsp; **{pair['score_a']:.1f}** &nbsp;"
+            + status_chip("unknown", f"{shared_count}/{own_count_left} shared"),
+            unsafe_allow_html=True,
+        )
     with head_right:
         st.markdown(f"#### {right_name}")
-        st.markdown(grade_pill(str(right_row.get("score_letter", ""))) + f" &nbsp; **{right_row.get('score_composite', 0):.1f}**", unsafe_allow_html=True)
+        st.markdown(
+            grade_pill(str(right_row.get("score_letter", "")))
+            + f" &nbsp; **{pair['score_b']:.1f}** &nbsp;"
+            + status_chip("unknown", f"{shared_count}/{own_count_right} shared"),
+            unsafe_allow_html=True,
+        )
+
+    if shared_count == 0:
+        st.warning(
+            "These repositories share no available metrics — composite scores "
+            "are not directly comparable. Showing each repo's own composite."
+        )
+    else:
+        st.caption(
+            f"Composites above are renormalized over the {shared_count} metric(s) "
+            f"available on both repos: {', '.join(pair['metrics'])}. "
+            f"Pair coverage: {pair['coverage'] * 100:.0f}% of configured weight."
+        )
 
     st.plotly_chart(
         _metric_radar(left_row, compare_row=right_row, compare_label=right_name),
@@ -261,8 +288,17 @@ def render() -> None:
     repo_row = df[df["repo_name"] == selected].iloc[0]
 
     # --------------------------------------------------------- repo summary
+    available_count = len(repo_row.get("score_per_metric", {}) or {})
+    unavailable_count = len(repo_row.get("score_unavailable_metrics", []) or [])
+    total_metrics = available_count + unavailable_count
+    coverage_pct = float(repo_row.get("score_coverage", 0.0)) * 100
+
     st.markdown(
-        f"## {selected} &nbsp; {grade_pill(str(repo_row.get('score_letter', '')))}",
+        f"## {selected} &nbsp; {grade_pill(str(repo_row.get('score_letter', '')))} &nbsp; "
+        + status_chip(
+            "warn" if coverage_pct < 80 else "pass",
+            f"{available_count}/{total_metrics} metrics ({coverage_pct:.0f}% weight)",
+        ),
         unsafe_allow_html=True,
     )
     sum_a, sum_b, sum_c = st.columns(3)
