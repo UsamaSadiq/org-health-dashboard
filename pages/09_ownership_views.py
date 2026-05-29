@@ -5,8 +5,9 @@ import streamlit as st
 
 from dashboard.lib.config import get_feature_flags
 from dashboard.lib.data import load_my_repos, load_snapshot
-from dashboard.lib.linking import serialize_state
 from dashboard.lib.scoring import calculate_scores
+from dashboard.lib.share import share_link
+from dashboard.ui import share_link_block
 
 
 def _normalize_bucket(value: object) -> str:
@@ -99,11 +100,9 @@ def render() -> None:
                         use_container_width=True,
                     )
 
-    state = {"tab": "ownership", "coverage": str(coverage)}
-    st.text_input(
-        "Copy link to this view",
-        value=f"https://share.streamlit.io/?{serialize_state(state)}",
-        key="ownership_share_link",
+    share_link_block(
+        share_link({"tab": "ownership", "coverage": f"{coverage:.2f}"}),
+        label="Copy link to this view",
     )
 
 
