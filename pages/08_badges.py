@@ -4,6 +4,7 @@ import streamlit as st
 
 from dashboard.lib.badge import markdown_badge
 from dashboard.lib.data import load_snapshot
+from dashboard.lib.share import base_url
 
 
 def render() -> None:
@@ -16,7 +17,7 @@ def render() -> None:
         return
 
     repo = st.selectbox("Repository", sorted(df["repo_name"].astype(str).tolist()))
-    badge = markdown_badge(repo, "https://share.streamlit.io")
+    badge = markdown_badge(repo, base_url().rstrip("/"))
     st.write("Badge URL")
     st.code(badge.badge_url, language="text")
     st.write("Markdown")
