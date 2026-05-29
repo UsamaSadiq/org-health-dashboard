@@ -71,6 +71,22 @@ def test_pair_restricted_composite_renormalizes_over_intersection():
     assert 0 <= result["score_b"] <= 100
 
 
+def test_structural_and_activity_subscores_emitted():
+    scored = calculate_scores(_sample_frame())
+    row = scored.iloc[0]
+    # Sample data only populates structural metrics (commit_recency is activity);
+    # both sub-scores should be present and floats in [0, 100].
+    assert row["score_structural"] is not None
+    assert row["score_activity"] is not None
+    assert 0 <= row["score_structural"] <= 100
+    assert 0 <= row["score_activity"] <= 100
+    # Composite must lie within the convex hull of the two sub-scores
+    # (since each is a weighted-average partition of the available set).
+    lo = min(row["score_structural"], row["score_activity"])
+    hi = max(row["score_structural"], row["score_activity"])
+    assert lo - 0.01 <= row["score_composite"] <= hi + 0.01
+
+
 def test_letter_grade_boundary_is_half_open():
     """A 79.5 score must land in B, not fall through to F."""
     from dashboard.lib.scoring import _get_letter_grade
