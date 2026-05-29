@@ -16,9 +16,16 @@ class Score:
     letter: str
     per_metric: dict[str, float]
     per_metric_weight: dict[str, float]
+    per_metric_category: dict[str, str]
     unavailable_metrics: list[str]
     coverage: float  # 0..1 — fraction of total metric weight that was available
+    structural: float | None  # composite over the structural sub-set (None when empty)
+    activity: float | None  # composite over the activity sub-set (None when empty)
     config_version: str
+
+
+CATEGORY_STRUCTURAL = "structural"
+CATEGORY_ACTIVITY = "activity"
 
 
 DEFAULT_LETTER_GRADES = {"A": [80, 100], "B": [60, 79], "C": [40, 59], "D": [20, 39], "F": [0, 19]}
@@ -54,11 +61,16 @@ def score_row(
     total_weight = 0.0
     per_metric: dict[str, float] = {}
     per_metric_weight: dict[str, float] = {}
+    per_metric_category: dict[str, str] = {}
     unavailable: list[str] = []
+
+    structural_sum = structural_weight = 0.0
+    activity_sum = activity_weight = 0.0
 
     for metric_name, metric_cfg in metrics_cfg.items():
         weight = float(metric_cfg.get("weight", 0))
         total_weight += weight
+        category = str(metric_cfg.get("category", "")).lower() or None
 
         status = metric_cfg.get("status", "unavailable")
         column = metric_cfg.get("column")
@@ -69,11 +81,22 @@ def score_row(
         metric_score = _metric_score(metric_name, metric_cfg, row.get(column), row, reference_dt=reference_dt)
         per_metric[metric_name] = metric_score
         per_metric_weight[metric_name] = weight
+        if category:
+            per_metric_category[metric_name] = category
         weighted_sum += metric_score * weight
         available_weight += weight
 
+        if category == CATEGORY_STRUCTURAL:
+            structural_sum += metric_score * weight
+            structural_weight += weight
+        elif category == CATEGORY_ACTIVITY:
+            activity_sum += metric_score * weight
+            activity_weight += weight
+
     composite = weighted_sum / available_weight if available_weight else 0.0
     coverage = (available_weight / total_weight) if total_weight else 0.0
+    structural = round(structural_sum / structural_weight, 2) if structural_weight else None
+    activity = round(activity_sum / activity_weight, 2) if activity_weight else None
     letter = _get_letter_grade(composite, letter_grades)
 
     return Score(
@@ -81,8 +104,11 @@ def score_row(
         letter=letter,
         per_metric=per_metric,
         per_metric_weight=per_metric_weight,
+        per_metric_category=per_metric_category,
         unavailable_metrics=unavailable,
         coverage=round(float(coverage), 4),
+        structural=structural,
+        activity=activity,
         config_version=str(config.get("version", "unknown")),
     )
 
@@ -114,8 +140,11 @@ def calculate_scores(
     df["score_letter"] = [score.letter for score in scores]
     df["score_per_metric"] = [score.per_metric for score in scores]
     df["score_per_metric_weight"] = [score.per_metric_weight for score in scores]
+    df["score_per_metric_category"] = [score.per_metric_category for score in scores]
     df["score_unavailable_metrics"] = [score.unavailable_metrics for score in scores]
     df["score_coverage"] = [score.coverage for score in scores]
+    df["score_structural"] = [score.structural for score in scores]
+    df["score_activity"] = [score.activity for score in scores]
     df["score_config_version"] = [score.config_version for score in scores]
     return df
 

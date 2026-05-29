@@ -190,6 +190,26 @@ def _render_compare_panel(left_row: pd.Series, right_row: pd.Series, df: pd.Data
             f"Pair coverage: {pair['coverage'] * 100:.0f}% of configured weight."
         )
 
+    sub_cols = st.columns(2)
+    with sub_cols[0]:
+        s_l = left_row.get("score_structural")
+        a_l = left_row.get("score_activity")
+        st.caption(
+            f"Structural: **{s_l:.1f}**" if s_l is not None else "Structural: —"
+        )
+        st.caption(
+            f"Activity: **{a_l:.1f}**" if a_l is not None else "Activity: —"
+        )
+    with sub_cols[1]:
+        s_r = right_row.get("score_structural")
+        a_r = right_row.get("score_activity")
+        st.caption(
+            f"Structural: **{s_r:.1f}**" if s_r is not None else "Structural: —"
+        )
+        st.caption(
+            f"Activity: **{a_r:.1f}**" if a_r is not None else "Activity: —"
+        )
+
     st.plotly_chart(
         _metric_radar(left_row, compare_row=right_row, compare_label=right_name),
         use_container_width=True,
@@ -301,10 +321,16 @@ def render() -> None:
         ),
         unsafe_allow_html=True,
     )
-    sum_a, sum_b, sum_c = st.columns(3)
-    sum_a.metric("Composite score", f"{repo_row['score_composite']:.1f}")
+    structural = repo_row.get("score_structural")
+    activity = repo_row.get("score_activity")
+    sum_a, sum_b, sum_c, sum_d, sum_e = st.columns(5)
+    sum_a.metric("Composite", f"{repo_row['score_composite']:.1f}")
     sum_b.metric("Grade", repo_row["score_letter"])
-    sum_c.metric("Scoring config", str(repo_row.get("score_config_version", "unknown")))
+    sum_c.metric("Structural", f"{structural:.1f}" if structural is not None else "—",
+                 help="Baseline compliance: README, CI, openedx.yaml, deps.")
+    sum_d.metric("Activity", f"{activity:.1f}" if activity is not None else "—",
+                 help="Velocity signals: commits, PRs, releases, contributors.")
+    sum_e.metric("Scoring config", str(repo_row.get("score_config_version", "unknown")))
 
     share_link_block(
         share_link({"tab": "detail", "repo": selected, "compare": compare_value}),
