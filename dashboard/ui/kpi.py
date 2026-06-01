@@ -164,6 +164,7 @@ def render_kpi_strip(
     grade_a = int((df["score_letter"] == "A").sum())
     grade_f = int((df["score_letter"] == "F").sum())
     stale = _count_stale(df, stale_hours)
+    avg_coverage = float(df["score_coverage"].mean()) if "score_coverage" in df.columns and total else 0.0
 
     deltas: dict[str, str | None] = {
         "total": None, "avg": None, "a": None, "f": None, "stale": None,
@@ -198,11 +199,17 @@ def render_kpi_strip(
     with tiles_col:
         history = _load_org_avg_history(30)
         row1 = st.columns(2)
-        row2 = st.columns(2)
+        row2 = st.columns(3)
         row1[0].metric("Grade A", grade_a, delta=deltas["a"])
         row1[1].metric("Grade F", grade_f, delta=deltas["f"], delta_color="inverse")
         row2[0].metric("Average score", f"{avg:.1f}", delta=deltas["avg"])
         row2[1].metric("Stale repos", stale, delta=deltas["stale"], delta_color="inverse")
+        row2[2].metric(
+            "Score coverage",
+            f"{avg_coverage:.0%}",
+            help="Fraction of total metric weight that is currently computable. "
+                 "Remaining metrics require data not yet collected (e.g. PR response time).",
+        )
 
         spark = _sparkline(history)
         if spark is not None:
