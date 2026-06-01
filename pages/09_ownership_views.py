@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from dashboard.lib.config import get_feature_flags
-from dashboard.lib.data import load_my_repos, load_snapshot
+from dashboard.data import load_my_repos, load_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.share import share_link
 from dashboard.ui import share_link_block
@@ -73,14 +73,14 @@ def render() -> None:
         if theme_summary.empty:
             st.info("No theme ownership data found.")
         else:
-            st.dataframe(theme_summary, use_container_width=True)
+            st.dataframe(theme_summary, width="stretch")
 
     with tab_squad:
         squad_summary = _group_summary(df, "ownership.squad")
         if squad_summary.empty:
             st.info("No squad ownership data found.")
         else:
-            st.dataframe(squad_summary, use_container_width=True)
+            st.dataframe(squad_summary, width="stretch")
 
     with tab_my:
         if not get_feature_flags().get("enable_my_repos_filter", True):
@@ -97,7 +97,7 @@ def render() -> None:
                 else:
                     st.dataframe(
                         mine[["repo_name", "score_composite", "score_letter"]].sort_values("score_composite", ascending=False),
-                        use_container_width=True,
+                        width="stretch",
                     )
 
     share_link_block(

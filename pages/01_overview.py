@@ -5,14 +5,24 @@ from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 
-from dashboard.lib.data import export_json_payload, load_config, load_snapshot
+from dashboard.data import export_json_payload, load_config, load_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
 from dashboard.lib.share import share_link
 from dashboard.lib.trends import load_history
-from dashboard.ui import render_repo_pill_list, render_sidebar_filters, share_link_block
-from dashboard.ui.banners import render_freshness_banner
-from dashboard.ui.charts import category_pass_rate_bar, grade_histogram, top_failing_bar
+from dashboard.ui import (
+    card,
+    render_empty_state,
+    render_repo_pill_list,
+    render_sidebar_filters,
+    share_link_block,
+)
+from dashboard.ui.charts import (
+    category_pass_rate_bar,
+    grade_histogram,
+    grade_ribbon,
+    top_failing_bar,
+)
 from dashboard.ui.kpi import render_kpi_strip
 
 
@@ -91,7 +101,13 @@ def render() -> None:
     df = load_snapshot()
     if df.empty:
         st.title("Open edX Repository Health Dashboard")
-        st.error("No data available from upstream CSV or local cache.")
+        render_empty_state(
+            title="No snapshot available",
+            body="Upstream CSV and local cache are both empty. Try again in a few minutes.",
+            icon="cloud_off",
+        )
+        if st.button("Retry", type="primary"):
+            st.rerun()
         return
 
     df = calculate_scores(df)
@@ -109,10 +125,18 @@ def render() -> None:
         f"Snapshot {snapshot_date.isoformat() if snapshot_date else 'unknown'} · "
         "drill in via the sidebar nav."
     )
-    render_freshness_banner(snapshot_date, stale_hours, critical_hours)
 
-    filters = render_sidebar_filters()
+    filters = render_sidebar_filters(
+        snapshot_date=snapshot_date,
+        stale_hours=stale_hours,
+        critical_hours=critical_hours,
+    )
     working = filters.apply(df)
+
+    # Post-filter counter in the sidebar.
+    with st.sidebar:
+        st.caption(f"Showing {len(working)} of {len(df)} repos")
+
     if working.empty:
         st.warning("No repositories match the current filters.")
         return
@@ -120,26 +144,39 @@ def render() -> None:
     # ----------------------------------------------------------- 1. signals
     baseline = _baseline_frame()
     scoped_baseline = filters.apply(baseline) if baseline is not None else None
-    render_kpi_strip(working, baseline=scoped_baseline)
+    render_kpi_strip(
+        working,
+        baseline=scoped_baseline,
+        snapshot_date=snapshot_date,
+        stale_hours=stale_hours,
+    )
+
+    # --------------------------------------------------- 1b. grade ribbon
+    st.markdown("##### Grade mix")
+    st.plotly_chart(
+        grade_ribbon(working),
+        width="stretch",
+        config={"displayModeBar": False},
+    )
 
     # ------------------------------------------------------- 2. primary chart
     primary_tab, category_tab, failing_tab = st.tabs(
         ["Grade distribution", "Per-category pass rate", "Top failing checks"]
     )
     with primary_tab:
-        st.plotly_chart(grade_histogram(working), use_container_width=True)
+        st.plotly_chart(grade_histogram(working), width="stretch")
     with category_tab:
         category_df = _category_pass_rates(working)
         if category_df.empty:
             st.info("No categorizable check columns in this snapshot.")
         else:
-            st.plotly_chart(category_pass_rate_bar(category_df), use_container_width=True)
+            st.plotly_chart(category_pass_rate_bar(category_df), width="stretch")
     with failing_tab:
         fail_df = _top_failing(working)
         if fail_df.empty:
             st.success("No failing checks in the current filter scope.")
         else:
-            st.plotly_chart(top_failing_bar(fail_df), use_container_width=True)
+            st.plotly_chart(top_failing_bar(fail_df), width="stretch")
             st.caption("Drill down on individual checks in **Failing Checks**.")
 
     # ---------------------------------------------- 3. ranked tables + movers
@@ -147,7 +184,7 @@ def render() -> None:
         "score_composite", ascending=False
     )
 
-    st.subheader("Highlights")
+    st.subheader(":material/leaderboard: Highlights")
 
     def _repo_link(repo: str) -> str:
         return share_link({"tab": "detail", "repo": repo})
@@ -175,14 +212,14 @@ def render() -> None:
             st.markdown("**Biggest gainers (30d)**")
             st.dataframe(
                 movers.head(5)[["repo_name", "delta"]],
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
         with mv_right:
             st.markdown("**Biggest losers (30d)**")
             st.dataframe(
                 movers.tail(5)[["repo_name", "delta"]].sort_values("delta"),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
 
@@ -194,7 +231,7 @@ def render() -> None:
         )
         st.dataframe(
             table_with_links,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "repo_link": st.column_config.LinkColumn("Open in Repo Detail"),
@@ -203,7 +240,7 @@ def render() -> None:
 
     # --------------------------------------------- 5. share + export footer
     state = {"tab": "overview", **filters.as_query_params()}
-    with st.expander("Share & export", expanded=False):
+    with st.expander(":material/share: Share & export", expanded=False):
         share_link_block(share_link(state), label="Copy link to this view")
 
         export_name = f"openedx-health-{datetime.now(timezone.utc).date().isoformat()}"

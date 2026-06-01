@@ -7,7 +7,8 @@ import streamlit as st
 from dashboard.lib.bulletin import generate_weekly_bulletin
 from dashboard.lib.config import get_feature_flags
 from dashboard.lib.share import base_url, share_link
-from dashboard.lib.trends import load_history, summarize_weekly_changes
+from dashboard.data import load_history
+from dashboard.lib.trends import summarize_weekly_changes
 from dashboard.ui import share_link_block
 
 
@@ -31,13 +32,13 @@ def render() -> None:
     if changes["new_failures"].empty:
         st.success("No newly failing checks.")
     else:
-        st.dataframe(changes["new_failures"], use_container_width=True)
+        st.dataframe(changes["new_failures"], width="stretch")
 
     st.subheader("Newly passing checks")
     if changes["new_passes"].empty:
         st.info("No newly passing checks.")
     else:
-        st.dataframe(changes["new_passes"], use_container_width=True)
+        st.dataframe(changes["new_passes"], width="stretch")
 
     if get_feature_flags().get("enable_weekly_bulletin_export", True):
         commit_sha = os.getenv("GITHUB_SHA", "local")

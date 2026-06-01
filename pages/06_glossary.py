@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from dashboard.lib.data import load_config, load_snapshot
+from dashboard.data import load_config, load_snapshot
 from dashboard.lib.remediation import missing_remediation_checks
 
 

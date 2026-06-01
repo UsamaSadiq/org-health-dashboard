@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 
-from dashboard.lib.data import load_config, load_snapshot
+from dashboard.data import load_config, load_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.schema import parse_last_push_utc
 from dashboard.lib.share import share_link
@@ -88,8 +88,11 @@ def render() -> None:
     )
     st.dataframe(
         result,
-        use_container_width=True,
-        column_config={"repo_link": st.column_config.LinkColumn("Repo Detail Link")},
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "repo_link": st.column_config.LinkColumn("Open Detail"),
+        },
     )
     share_link_block(
         share_link({"tab": "needing-attention", "tier": selected_tier}),

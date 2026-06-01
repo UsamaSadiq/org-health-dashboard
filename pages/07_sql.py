@@ -3,7 +3,7 @@ from __future__ import annotations
 import duckdb
 import streamlit as st
 
-from dashboard.lib.data import load_snapshot
+from dashboard.data import load_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.sql import UnsafeQueryError, sanitize_readonly_query
 
@@ -27,7 +27,7 @@ def render() -> None:
             con.register("snapshot", df)
             sql = sanitize_readonly_query(query, row_limit=row_cap)
             result = con.execute(sql).fetch_df()
-            st.dataframe(result, use_container_width=True)
+            st.dataframe(result, width="stretch")
         except UnsafeQueryError as exc:
             st.error(str(exc))
         except Exception as exc:  # noqa: BLE001

@@ -6,13 +6,12 @@ import streamlit as st
 from rapidfuzz import fuzz
 
 from dashboard.lib.config import get_config, get_feature_flags
-from dashboard.lib.data import load_snapshot
+from dashboard.data import load_history, load_snapshot
 from dashboard.lib.linking import github_issue_url, github_pr_compare_url
 from dashboard.lib.remediation import get_remediation
 from dashboard.lib.scorecard import fetch_scorecard_result
 from dashboard.lib.scoring import calculate_scores, pair_restricted_composite
 from dashboard.lib.share import base_url, share_link
-from dashboard.lib.trends import load_history
 from dashboard.ui import grade_pill, share_link_block, status_chip
 from dashboard.ui.charts import sparkline
 
@@ -137,7 +136,7 @@ def _category_card(category: str, repo: str, row: pd.Series, cols: list[str], *,
         st.caption(f"Pass {pass_count} · Fail {fail_count} · N/A {na_count}")
         spark = _repo_sparkline(repo, cols)
         if not spark.empty and len(spark) >= 2:
-            st.plotly_chart(sparkline(spark), use_container_width=True, key=f"spark-{key_prefix}-{category}")
+            st.plotly_chart(sparkline(spark), width="stretch", key=f"spark-{key_prefix}-{category}")
     return {"pass": pass_count, "fail": fail_count, "na": na_count}
 
 
@@ -212,7 +211,7 @@ def _render_compare_panel(left_row: pd.Series, right_row: pd.Series, df: pd.Data
 
     st.plotly_chart(
         _metric_radar(left_row, compare_row=right_row, compare_label=right_name),
-        use_container_width=True,
+        width="stretch",
         key=f"compare-radar-{left_name}-{right_name}",
     )
 
@@ -345,7 +344,7 @@ def render() -> None:
             return
 
     # ------------------------------------------------------- single-repo view
-    st.plotly_chart(_metric_radar(repo_row), use_container_width=True, key=f"radar-{selected}")
+    st.plotly_chart(_metric_radar(repo_row), width="stretch", key=f"radar-{selected}")
 
     if feature_flags.get("enable_scorecard_panel", False):
         with st.expander("OpenSSF Scorecard parity", expanded=False):
@@ -364,7 +363,7 @@ def render() -> None:
                     checks_df = pd.DataFrame(
                         [{"check": item.name, "score": item.score, "reason": item.reason} for item in scorecard.checks]
                     )
-                    st.dataframe(checks_df.sort_values("check"), use_container_width=True, hide_index=True)
+                    st.dataframe(checks_df.sort_values("check"), width="stretch", hide_index=True)
 
     # ----------------------------------------------------- category cards
     st.subheader("Category overview")
