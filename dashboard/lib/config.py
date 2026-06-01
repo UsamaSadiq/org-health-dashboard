@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -42,16 +43,18 @@ def get_config(section: str, org: str = "openedx") -> dict:
 
 @lru_cache(maxsize=1)
 def get_feature_flags() -> dict:
-    """Load feature flags from root config file."""
-    root_flags = CONFIG_DIR / "feature_flags.yaml"
-    if root_flags.exists():
-        payload = read_config_file(root_flags)
-        validate_config_data("feature_flags", payload, strict=False)
-        return payload
+    """Load feature flags from root config file.
 
-    legacy_flags = ORG_CONFIG_DIR / "feature_flags.yaml"
-    if legacy_flags.exists():
-        payload = read_config_file(legacy_flags)
-        validate_config_data("feature_flags", payload, strict=False)
-        return payload
-    return {}
+    When the environment variable DASHBOARD_ENABLE_ALL_FEATURES is set to
+    "true" (case-insensitive), every known flag is forced to True regardless
+    of the YAML values. Intended for local development and per-client
+    feature previews.
+    """
+    root_flags = CONFIG_DIR / "feature_flags.yaml"
+    payload = read_config_file(root_flags) if root_flags.exists() else {}
+    validate_config_data("feature_flags", payload, strict=False)
+
+    if os.environ.get("DASHBOARD_ENABLE_ALL_FEATURES", "").strip().lower() == "true":
+        payload = {key: True for key in payload}
+
+    return payload
