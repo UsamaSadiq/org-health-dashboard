@@ -49,7 +49,7 @@ metrics:
   readme_quality:
     weight: 0.10
     category: "structural"
-    column: "readme.getting-help"
+    column: "readme.bad_links"
     status: "computable"
     default_when_missing: 50
   ci_status:
