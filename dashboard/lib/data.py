@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -22,14 +21,11 @@ DEFAULT_CSV_URL = (
 CACHE_DIR = DASHBOARD_DIR.parent / ".cache" / "dashboard_data"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-
-def _cache_file_path() -> Path:
-    return CACHE_DIR / f"snapshot_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+_LAST_KNOWN_GOOD = CACHE_DIR / "last_known_good.csv"
 
 
 def _latest_cache_file() -> Path | None:
-    files = sorted(CACHE_DIR.glob("snapshot_*.csv"))
-    return files[-1] if files else None
+    return _LAST_KNOWN_GOOD if _LAST_KNOWN_GOOD.exists() else None
 
 
 def _validate_snapshot(df: pd.DataFrame, cfg: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -57,7 +53,7 @@ def _fetch_snapshot_dataframe(cfg: dict[str, Any]) -> pd.DataFrame:
 
 
 def _save_cache(df: pd.DataFrame) -> None:
-    df.to_csv(_cache_file_path(), index=False)
+    df.to_csv(_LAST_KNOWN_GOOD, index=False)
 
 
 def _load_from_cache() -> pd.DataFrame:
