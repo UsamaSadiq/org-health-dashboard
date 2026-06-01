@@ -9,7 +9,7 @@ from dashboard.data import export_json_payload, load_config, load_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
 from dashboard.lib.share import share_link
-from dashboard.lib.trends import load_history
+from dashboard.data import load_history
 from dashboard.ui import (
     card,
     render_empty_state,
