@@ -9,5 +9,3 @@ stale_threshold_hours: 48
 critically_stale_threshold_hours: 168
 expected_min_rows: 100
 expected_min_columns: 100
-repo_column: "repo_name"
-timestamp_column: "TIMESTAMP"
