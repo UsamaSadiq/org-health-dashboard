@@ -197,7 +197,7 @@ def _render_compare_panel(left_row: pd.Series, right_row: pd.Series, df: pd.Data
             f"Structural: **{s_l:.1f}**" if s_l is not None else "Structural: —"
         )
         st.caption(
-            f"Activity: **{a_l:.1f}**" if a_l is not None else "Activity: —"
+            f"Activity (recency): **{a_l:.1f}**" if a_l is not None else "Activity: —"
         )
     with sub_cols[1]:
         s_r = right_row.get("score_structural")
@@ -206,7 +206,7 @@ def _render_compare_panel(left_row: pd.Series, right_row: pd.Series, df: pd.Data
             f"Structural: **{s_r:.1f}**" if s_r is not None else "Structural: —"
         )
         st.caption(
-            f"Activity: **{a_r:.1f}**" if a_r is not None else "Activity: —"
+            f"Activity (recency): **{a_r:.1f}**" if a_r is not None else "Activity: —"
         )
 
     st.plotly_chart(
@@ -328,7 +328,7 @@ def render() -> None:
     sum_c.metric("Structural", f"{structural:.1f}" if structural is not None else "—",
                  help="Baseline compliance: README, CI, openedx.yaml, deps.")
     sum_d.metric("Activity", f"{activity:.1f}" if activity is not None else "—",
-                 help="Velocity signals: commits, PRs, releases, contributors.")
+                 help="Commit recency only — PR response time, release frequency, and contributor signals are not yet collected.")
     sum_e.metric("Scoring config", str(repo_row.get("score_config_version", "unknown")))
 
     share_link_block(
