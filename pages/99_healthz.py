@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import streamlit as st
 
-from dashboard.lib.data import load_config, load_snapshot
+from dashboard.data import load_config, load_snapshot
 from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
 
 

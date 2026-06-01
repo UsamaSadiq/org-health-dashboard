@@ -3,7 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from dashboard.lib.badge import markdown_badge
-from dashboard.lib.data import load_snapshot
+from dashboard.data import load_snapshot
 from dashboard.lib.share import base_url
 
 

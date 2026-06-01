@@ -7,9 +7,12 @@ pages preserves the user's selections.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 import pandas as pd
 import streamlit as st
+
+from dashboard.ui.banners import freshness_chip_html
 
 
 TIER_OPTIONS = ["all", "critical", "important", "standard"]
@@ -41,10 +44,26 @@ class FilterState:
         }
 
 
-def render_sidebar_filters(*, show_tier: bool = True, show_archived: bool = True) -> FilterState:
+def render_sidebar_filters(
+    *,
+    show_tier: bool = True,
+    show_archived: bool = True,
+    snapshot_date: date | None = None,
+    stale_hours: int = 48,
+    critical_hours: int = 168,
+) -> FilterState:
     """Render the shared filter group in the sidebar. Returns the live state."""
     with st.sidebar:
-        st.markdown("### Filters")
+        chip_html = freshness_chip_html(snapshot_date, stale_hours, critical_hours)
+        st.markdown(
+            '<div class="sidebar-identity">'
+            '<div class="sidebar-wordmark">Open edX Health</div>'
+            f'{chip_html}'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown('<div class="sidebar-section">Filters</div>', unsafe_allow_html=True)
         search = st.text_input(
             "Search repositories",
             value=st.session_state.get("filter_search", ""),
@@ -70,6 +89,14 @@ def render_sidebar_filters(*, show_tier: bool = True, show_archived: bool = True
             )
             if show_tier
             else "all"
+        )
+
+        st.markdown("---")
+        st.toggle(
+            "Dark mode",
+            value=st.session_state.get("theme_dark", False),
+            key="theme_dark",
+            help="Switches the dashboard to a dark palette.",
         )
 
     return FilterState(search=search, include_archived=include_archived, tier=tier)

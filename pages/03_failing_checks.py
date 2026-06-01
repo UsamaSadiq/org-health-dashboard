@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from dashboard.lib.data import load_snapshot
+from dashboard.data import load_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.share import share_link
 from dashboard.ui import share_link_block
@@ -52,7 +52,7 @@ def render() -> None:
 
     selection = st.plotly_chart(
         fig,
-        use_container_width=True,
+        width="stretch",
         on_select="rerun",
         selection_mode=["points"],
     )
@@ -76,7 +76,7 @@ def render() -> None:
     )
     st.dataframe(
         result,
-        use_container_width=True,
+        width="stretch",
         column_config={"repo_link": st.column_config.LinkColumn("Repo Detail Link")},
     )
     share_link_block(
