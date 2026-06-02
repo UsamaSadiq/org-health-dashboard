@@ -100,7 +100,6 @@ def register_plotly_template() -> None:
 # ---------------------------------------------------------------------------
 _BASE_CSS = f"""
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap');
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
   :root {{
@@ -128,18 +127,15 @@ _BASE_CSS = f"""
     --shadow-card-hi: 0 2px 4px rgba(15,23,42,.06), 0 10px 24px rgba(15,23,42,.10);
   }}
 
-  html, body, .stMarkdown, .stText, button, input, textarea, select {{
+  html, body, .stMarkdown, .stText, input, textarea, select {{
     font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   }}
-  /* Apply Inter to Streamlit internal elements but exclude Material Symbols
-     icon spans — those need their own font-family for ligatures to render. */
-  [class*="st-"]:not([class*="material-symbols"]) {{
+  /* Apply Inter to Streamlit internal elements.
+     Do NOT include button here — Streamlit renders many icon-bearing controls
+     as <button> elements and overriding font-family breaks Material Symbols
+     ligature rendering (icons appear as raw text e.g. "arrow_drop_down"). */
+  [class*="st-"] {{
     font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  }}
-  /* Guarantee the icon font is never overridden */
-  .material-symbols-rounded,
-  [class*="material-symbols"] {{
-    font-family: 'Material Symbols Rounded' !important;
   }}
 
   .stApp {{ background-color: var(--color-page); }}
