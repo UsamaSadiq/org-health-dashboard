@@ -1,4 +1,9 @@
-version: "1.1"
+version: "2.0"
+# v2.0 changes (from v1.1):
+#   - readme_quality: per-column parse rules replace uniform boolean predicate;
+#     score is now proportion-of-passing-sub-checks × 100
+#   - dependency_freshness: binary 0/100 (no more 20-point floor for missing tooling)
+#   - parse_rule fields document how each column value maps to 0/100
 letter_grades:
   A: [80, 100]
   B: [60, 79]
@@ -10,7 +15,7 @@ metrics:
     weight: 0.15
     category: "activity"
     column: "github.last_push"
-    type: "days_ago"
+    parse_rule: "threshold_days"
     parse_format: "%Y-%m-%d %H:%M:%S"
     thresholds: [{days: 7, score: 100}, {days: 30, score: 80}, {days: 90, score: 50}, {days: 365, score: 20}]
     default_when_missing: 50
@@ -20,6 +25,7 @@ metrics:
     weight: 0.15
     category: "activity"
     column: "github.median_pr_response_seconds"
+    parse_rule: "threshold_numeric"
     status: "unavailable"
     default_when_missing: 50
     chaoss_metric: "Issue Response Time"
@@ -27,6 +33,7 @@ metrics:
     weight: 0.15
     category: "activity"
     column: "github.pr_closure_ratio_90d"
+    parse_rule: "threshold_numeric"
     status: "unavailable"
     default_when_missing: 50
     chaoss_metric: "Change Request Closure Ratio"
@@ -34,6 +41,7 @@ metrics:
     weight: 0.10
     category: "activity"
     column: "github.release_count_12mo"
+    parse_rule: "threshold_numeric"
     status: "unavailable"
     default_when_missing: 50
     chaoss_metric: "Release Frequency"
@@ -41,6 +49,7 @@ metrics:
     weight: 0.10
     category: "activity"
     column: "github.contributor_count_90d"
+    parse_rule: "threshold_numeric"
     status: "unavailable"
     default_when_missing: 50
     chaoss_metric: "Contributor Absence Factor"
@@ -50,12 +59,21 @@ metrics:
     weight: 0.10
     category: "structural"
     column: "readme.bad_links"
+    parse_rule: "readme_sub_checks"
+    # Sub-check rules (see dashboard/lib/scoring.py _README_RULES for full spec):
+    #   readme.getting-help      boolean           — True if help link present
+    #   readme.security          boolean           — True if security contact present
+    #   readme.irc-missing       inverted_boolean  — True if obsolete IRC ref absent
+    #   readme.mailing-list-missing inverted_boolean — True if obsolete list ref absent
+    #   readme.bad_links         list_empty_passes — [] means no broken links
+    #   readme.good_links        list_nonempty_passes — non-empty means working links exist
     status: "computable"
     default_when_missing: 50
   ci_status:
     weight: 0.10
     category: "structural"
     column: "github_actions"
+    parse_rule: "boolean"
     status: "computable"
     default_when_missing: 50
     scorecard_check: "CI-Tests"
@@ -63,12 +81,16 @@ metrics:
     weight: 0.10
     category: "structural"
     column: "exists.openedx.yaml"
+    parse_rule: "boolean"
     status: "computable"
     default_when_missing: 50
   dependency_freshness:
     weight: 0.05
     category: "structural"
     column: "renovate.configured"
+    parse_rule: "boolean_any_dep_tool"
+    # Passes (100) if dependabot.* OR renovate.configured is true; 0 otherwise.
+    # No partial credit — either automated dep updates are configured or they aren't.
     status: "computable"
     default_when_missing: 50
     scorecard_check: "Dependency-Update-Tool"
