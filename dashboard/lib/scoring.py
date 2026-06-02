@@ -268,39 +268,75 @@ def _score_by_threshold(value: float, thresholds: list[dict[str, Any]], default:
     return float(default)
 
 
-def _score_readme_quality(row: pd.Series) -> float:
-    readme_cols = [
-        name
-        for name in row.index
-        if name.startswith("readme.") and name not in {"readme.url", "readme.length"}
-    ]
-    if not readme_cols:
-        return 50.0
+# Per-column parse rules derived from check_readme.py source semantics.
+# "boolean"             — True/1/yes = passes (GOOD_THINGS in the check source)
+# "inverted_boolean"    — True = correctly absent (BAD_THINGS; True means the bad
+#                         pattern is missing, which is good)
+# "list_empty_passes"   — empty list [] = no broken links = passes
+# "list_nonempty_passes"— non-empty list = has working links = passes
+_README_RULES: dict[str, str] = {
+    "readme.getting-help": "boolean",
+    "readme.security": "boolean",
+    "readme.irc-missing": "inverted_boolean",
+    "readme.mailing-list-missing": "inverted_boolean",
+    "readme.bad_links": "list_empty_passes",
+    "readme.good_links": "list_nonempty_passes",
+}
 
-    penalty = 0
-    for col in readme_cols:
-        value = str(row.get(col, "")).strip().lower()
-        is_passing = value in {"true", "1", "yes"}
-        if not is_passing:
-            penalty += 10
-    return float(max(0, 100 - penalty))
+_FALSY_STR = {"", "nan", "none"}
+_PASS_STR = {"true", "1", "yes"}
+
+
+def _readme_sub_check_passes(rule: str, value: Any) -> bool | None:
+    """Apply a parse rule to a single readme sub-check value.
+
+    Returns None when the value is missing/uncomputable so the caller
+    can exclude the check from the denominator rather than count it as a fail.
+    """
+    val_str = str(value).strip().lower()
+    if val_str in _FALSY_STR or pd.isna(value):
+        return None
+    if rule in {"boolean", "inverted_boolean"}:
+        return val_str in _PASS_STR
+    if rule == "list_empty_passes":
+        return val_str == "[]"
+    if rule == "list_nonempty_passes":
+        return val_str != "[]"
+    return None
+
+
+def _score_readme_quality(row: pd.Series) -> float:
+    """Score readme quality as the proportion of passing sub-checks × 100.
+
+    Each sub-check column has an explicit parse rule (see _README_RULES) derived
+    from the upstream check_readme.py source. Sub-checks whose values are missing
+    or uncomputable are excluded from the denominator rather than counted as fails.
+    """
+    results: list[bool] = []
+    for col, rule in _README_RULES.items():
+        if col not in row.index:
+            continue
+        outcome = _readme_sub_check_passes(rule, row.get(col))
+        if outcome is not None:
+            results.append(outcome)
+    if not results:
+        return 50.0
+    return round(sum(results) / len(results) * 100, 2)
 
 
 def _score_dependency_freshness(row: pd.Series) -> float:
-    dependabot_cols = [name for name in row.index if name.startswith("dependabot.")]
-    dependabot_signals = [str(row.get(col, "")).strip().lower() in {"true", "1", "yes"} for col in dependabot_cols]
-    has_dependabot = any(dependabot_signals)
+    """Binary pass/fail: 100 if any dep-update tool is configured, 0 otherwise.
 
-    renovate_configured = str(row.get("renovate.configured", "")).strip().lower() in {"true", "1", "yes"}
-
-    score = 0
-    if has_dependabot:
-        score += 60
-    if renovate_configured:
-        score += 40
-    if score == 0:
-        return 20.0
-    return float(min(100, score))
+    A repo with neither Dependabot nor Renovate has no automated dependency
+    hygiene — a 20-point floor (the old behaviour) inflated scores dishonestly.
+    """
+    has_dependabot = any(
+        str(row.get(col, "")).strip().lower() in _PASS_STR
+        for col in row.index
+        if col.startswith("dependabot.")
+    )
+    has_renovate = str(row.get("renovate.configured", "")).strip().lower() in _PASS_STR
+    return 100.0 if (has_dependabot or has_renovate) else 0.0
 
 
 def _get_letter_grade(score: float, grades: dict[str, list[int]]) -> str:
