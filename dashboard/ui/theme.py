@@ -127,14 +127,13 @@ _BASE_CSS = f"""
     --shadow-card-hi: 0 2px 4px rgba(15,23,42,.06), 0 10px 24px rgba(15,23,42,.10);
   }}
 
-  html, body, .stMarkdown, .stText, input, textarea, select {{
-    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  }}
-  /* Apply Inter to Streamlit internal elements.
-     Do NOT include button here — Streamlit renders many icon-bearing controls
-     as <button> elements and overriding font-family breaks Material Symbols
-     ligature rendering (icons appear as raw text e.g. "arrow_drop_down"). */
-  [class*="st-"] {{
+  /* Scope Inter only to content we own. Never use [class*="st-"] or button
+     here — Streamlit's emotion CSS applies Material Symbols Rounded to icon
+     spans via st-emotion-cache-* classes; a broad selector overrides that and
+     renders icons as raw ligature text (e.g. "arrow_drop_down"). */
+  html, body, .stMarkdown, .stText, input, textarea, select,
+  [data-testid="stMarkdownContainer"],
+  [data-testid="stCaptionContainer"] {{
     font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   }}
 
