@@ -43,3 +43,18 @@ def test_load_my_repos_matches_ownership_owner(monkeypatch):
     result = data.load_my_repos("alice")
     assert len(result) == 1
     assert result.iloc[0]["repo_name"] == "example/repo"
+
+
+def test_load_my_repos_matches_ownership_owner_name(monkeypatch):
+    """The catalog-info-derived owner_name column is matched too."""
+    frame = pd.DataFrame(
+        {
+            "repo_name": ["example/repo", "another/repo"],
+            "ownership.owner_name": ["team-x", "team-y"],
+        }
+    )
+    monkeypatch.setattr(data, "load_snapshot", lambda: frame)
+
+    result = data.load_my_repos("team-x")
+    assert len(result) == 1
+    assert result.iloc[0]["repo_name"] == "example/repo"
