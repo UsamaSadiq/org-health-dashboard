@@ -7,7 +7,8 @@ history_path: "dashboards/dashboard_main.csv"
 # the dashboard makes no GitHub API calls at runtime. Set history_csv_url to
 # override the derived raw URL (repo main branch + history_file).
 history_file: "dashboards/dashboard_history.csv"
-history_days: 90
+# Retention of the accumulated history file (matches the pipeline producer).
+history_days: 30
 cache_ttl_seconds: 300
 fallback_to_last_known_good: true
 stale_threshold_hours: 48
