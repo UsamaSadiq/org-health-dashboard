@@ -4,7 +4,6 @@
   "properties": {
     "enable_sql_page": {"type": "boolean"},
     "enable_badge_links": {"type": "boolean"},
-    "enable_compare_mode": {"type": "boolean"},
     "enable_pr_template_generator": {"type": "boolean"},
     "enable_weekly_bulletin_export": {"type": "boolean"},
     "enable_scorecard_panel": {"type": "boolean"},

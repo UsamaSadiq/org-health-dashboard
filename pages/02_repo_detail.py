@@ -10,7 +10,7 @@ from dashboard.data import load_history, load_snapshot
 from dashboard.lib.linking import github_issue_url, github_pr_compare_url
 from dashboard.lib.remediation import get_remediation
 from dashboard.lib.scorecard import fetch_scorecard_result
-from dashboard.lib.scoring import calculate_scores, pair_restricted_composite
+from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.share import base_url, share_link
 from dashboard.ui import grade_pill, share_link_block, status_chip
 from dashboard.ui.charts import sparkline
@@ -94,7 +94,7 @@ def _repo_sparkline(repo: str, cols: list[str]) -> pd.DataFrame:
     return pd.DataFrame(points)
 
 
-def _metric_radar(repo_row: pd.Series, *, compare_row: pd.Series | None = None, compare_label: str = "") -> go.Figure:
+def _metric_radar(repo_row: pd.Series) -> go.Figure:
     per_metric = repo_row.get("score_per_metric", {}) or {}
     unavailable = set(repo_row.get("score_unavailable_metrics", []) or [])
     labels = list(per_metric.keys()) + [name for name in unavailable if name not in per_metric]
@@ -104,11 +104,6 @@ def _metric_radar(repo_row: pd.Series, *, compare_row: pd.Series | None = None, 
     values = [per_metric.get(label, 100.0 if label in unavailable else 0.0) for label in labels]
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(r=values, theta=labels, fill="toself", name=str(repo_row.get("repo_name", "Selected"))))
-
-    if compare_row is not None:
-        compare_metrics = compare_row.get("score_per_metric", {}) or {}
-        compare_values = [compare_metrics.get(label, 0.0) for label in labels]
-        fig.add_trace(go.Scatterpolar(r=compare_values, theta=labels, fill="toself", name=compare_label or "Compare", opacity=0.5))
 
     fig.update_layout(polar={"radialaxis": {"visible": True, "range": [0, 100]}}, showlegend=True)
     return fig
@@ -138,97 +133,6 @@ def _category_card(category: str, repo: str, row: pd.Series, cols: list[str], *,
         if not spark.empty and len(spark) >= 2:
             st.plotly_chart(sparkline(spark), width="stretch", key=f"spark-{key_prefix}-{category}")
     return {"pass": pass_count, "fail": fail_count, "na": na_count}
-
-
-def _delta_badge(current: int, baseline: int, *, lower_is_better: bool = False) -> str:
-    delta = current - baseline
-    if delta == 0:
-        return status_chip("unknown", "—")
-    sign = "+" if delta > 0 else ""
-    improving = (delta < 0) if lower_is_better else (delta > 0)
-    return status_chip("pass" if improving else "fail", f"{sign}{delta}")
-
-
-def _render_compare_panel(left_row: pd.Series, right_row: pd.Series, df: pd.DataFrame) -> None:
-    st.subheader("Side-by-side comparison")
-    left_name = str(left_row["repo_name"])
-    right_name = str(right_row["repo_name"])
-
-    pair = pair_restricted_composite(left_row, right_row)
-    shared_count = len(pair["metrics"])
-    own_count_left = len(left_row.get("score_per_metric", {}) or {})
-    own_count_right = len(right_row.get("score_per_metric", {}) or {})
-
-    head_left, head_right = st.columns(2)
-    with head_left:
-        st.markdown(f"#### {left_name}")
-        st.markdown(
-            grade_pill(str(left_row.get("score_letter", "")))
-            + f" &nbsp; **{pair['score_a']:.1f}** &nbsp;"
-            + status_chip("unknown", f"{shared_count}/{own_count_left} shared"),
-            unsafe_allow_html=True,
-        )
-    with head_right:
-        st.markdown(f"#### {right_name}")
-        st.markdown(
-            grade_pill(str(right_row.get("score_letter", "")))
-            + f" &nbsp; **{pair['score_b']:.1f}** &nbsp;"
-            + status_chip("unknown", f"{shared_count}/{own_count_right} shared"),
-            unsafe_allow_html=True,
-        )
-
-    if shared_count == 0:
-        st.warning(
-            "These repositories share no available metrics — composite scores "
-            "are not directly comparable. Showing each repo's own composite."
-        )
-    else:
-        st.caption(
-            f"Composites above are renormalized over the {shared_count} metric(s) "
-            f"available on both repos: {', '.join(pair['metrics'])}. "
-            f"Pair coverage: {pair['coverage'] * 100:.0f}% of configured weight."
-        )
-
-    sub_cols = st.columns(2)
-    with sub_cols[0]:
-        s_l = left_row.get("score_structural")
-        a_l = left_row.get("score_activity")
-        st.caption(
-            f"Structural: **{s_l:.1f}**" if s_l is not None else "Structural: —"
-        )
-        st.caption(
-            f"Activity (recency): **{a_l:.1f}**" if a_l is not None else "Activity: —"
-        )
-    with sub_cols[1]:
-        s_r = right_row.get("score_structural")
-        a_r = right_row.get("score_activity")
-        st.caption(
-            f"Structural: **{s_r:.1f}**" if s_r is not None else "Structural: —"
-        )
-        st.caption(
-            f"Activity (recency): **{a_r:.1f}**" if a_r is not None else "Activity: —"
-        )
-
-    st.plotly_chart(
-        _metric_radar(left_row, compare_row=right_row, compare_label=right_name),
-        width="stretch",
-        key=f"compare-radar-{left_name}-{right_name}",
-    )
-
-    categories = _category_columns(df)
-    for category, cols in categories.items():
-        if not cols:
-            continue
-        col_left, col_mid, col_right = st.columns([5, 2, 5])
-        with col_left:
-            left_stats = _category_card(category, left_name, left_row, cols, key_prefix=f"L-{left_name}")
-        with col_right:
-            right_stats = _category_card(category, right_name, right_row, cols, key_prefix=f"R-{right_name}")
-        with col_mid:
-            st.markdown("<div style='text-align:center; padding-top: 16px'>", unsafe_allow_html=True)
-            st.markdown(f"Pass {_delta_badge(left_stats['pass'], right_stats['pass'])}", unsafe_allow_html=True)
-            st.markdown(f"Fail {_delta_badge(left_stats['fail'], right_stats['fail'], lower_is_better=True)}", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
 
 
 def _render_check_expander(check: str, repo_row: pd.Series, selected_repo: str, *, descriptions: dict, pr_cfg: dict, feature_flags: dict, whitelisted: set[str]) -> None:
@@ -285,20 +189,11 @@ def render() -> None:
 
     repos = sorted(df["repo_name"].dropna().astype(str).tolist())
     query_repo = str(st.query_params.get("repo", ""))
-    query_compare = str(st.query_params.get("compare", ""))
 
     # ----------------------------------------------------------------- header
-    pick_left, pick_right = st.columns([3, 3])
-    with pick_left:
-        search = st.text_input("Find repository", value=query_repo or "", key="detail_search", placeholder="fuzzy match…")
-        options = _fuzzy_repo_options(repos, search)
-        selected = st.selectbox("Repository", options=options, index=0 if options else None, key="detail_selected")
-    compare_value = ""
-    with pick_right:
-        if feature_flags.get("enable_compare_mode", True):
-            compare_options = [""] + [repo for repo in repos if repo != selected]
-            compare_index = compare_options.index(query_compare) if query_compare in compare_options else 0
-            compare_value = st.selectbox("Compare with", options=compare_options, index=compare_index, key="detail_compare")
+    search = st.text_input("Find repository", value=query_repo or "", key="detail_search", placeholder="fuzzy match…")
+    options = _fuzzy_repo_options(repos, search)
+    selected = st.selectbox("Repository", options=options, index=0 if options else None, key="detail_selected")
 
     if not selected:
         st.info("Pick a repository to see its detail.")
@@ -332,16 +227,9 @@ def render() -> None:
     sum_e.metric("Scoring config", str(repo_row.get("score_config_version", "unknown")))
 
     share_link_block(
-        share_link({"tab": "detail", "repo": selected, "compare": compare_value}),
+        share_link({"tab": "detail", "repo": selected}),
         label="Copy link to this view",
     )
-
-    # ------------------------------------------------------- compare mode
-    if compare_value:
-        compare_row = df[df["repo_name"] == compare_value]
-        if not compare_row.empty:
-            _render_compare_panel(repo_row, compare_row.iloc[0], df)
-            return
 
     # ------------------------------------------------------- single-repo view
     st.plotly_chart(_metric_radar(repo_row), width="stretch", key=f"radar-{selected}")
