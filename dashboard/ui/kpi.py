@@ -45,15 +45,16 @@ def _letter_from_score(score: float) -> str:
     return "F"
 
 
-def _gauge_figure(avg: float, total: int, snapshot_date: date | None) -> go.Figure:
+def _gauge_figure(avg: float) -> go.Figure:
     letter = _letter_from_score(avg)
     color = GRADE_COLORS.get(letter, PRIMARY)
 
+    # mode="gauge" (no auto number) so the value and grade can be placed as
+    # separate, non-overlapping annotations inside the arc.
     fig = go.Figure(
         go.Indicator(
-            mode="gauge+number",
+            mode="gauge",
             value=round(avg, 1),
-            number={"font": {"size": 44, "color": TEXT}, "suffix": ""},
             gauge={
                 "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": BORDER, "tickfont": {"color": MUTED}},
                 "bar": {"color": color, "thickness": 0.25},
@@ -68,21 +69,18 @@ def _gauge_figure(avg: float, total: int, snapshot_date: date | None) -> go.Figu
                 ],
                 "threshold": {"line": {"color": color, "width": 3}, "thickness": 0.75, "value": avg},
             },
-            domain={"x": [0, 1], "y": [0.15, 1]},
+            domain={"x": [0, 1], "y": [0.20, 1]},
         )
     )
 
+    # Value above, grade below — comfortably separated in the arc's bowl.
     fig.add_annotation(
-        x=0.5, y=0.18, xref="paper", yref="paper",
-        text=f"<b style='font-size:34px;color:{color};'>{letter}</b>",
-        showarrow=False,
+        x=0.5, y=0.30, xref="paper", yref="paper", showarrow=False,
+        text=f"<b style='font-size:42px;color:{TEXT};'>{avg:.1f}</b>",
     )
-
-    snap = snapshot_date.isoformat() if snapshot_date else "unknown"
     fig.add_annotation(
-        x=0.5, y=0.02, xref="paper", yref="paper",
-        text=f"<span style='color:{MUTED};font-size:12px;'>{total} repos · snapshot {snap}</span>",
-        showarrow=False,
+        x=0.5, y=0.10, xref="paper", yref="paper", showarrow=False,
+        text=f"<b style='font-size:22px;color:{color};'>Grade {letter}</b>",
     )
 
     fig.update_layout(
@@ -191,20 +189,24 @@ def render_kpi_strip(
             unsafe_allow_html=True,
         )
         st.plotly_chart(
-            _gauge_figure(avg, total, snapshot_date),
+            _gauge_figure(avg),
             width="stretch",
             config={"displayModeBar": False},
         )
+        snap = snapshot_date.isoformat() if snapshot_date else "unknown"
+        st.caption(f"{total} repos · snapshot {snap}")
 
     with tiles_col:
         history = _load_org_avg_history(30)
+        # Uniform 2x2 grid of equal-width tiles. Average score is intentionally
+        # omitted here — it's the gauge's central value (with the trend shown by
+        # the sparkline below), so a separate tile would just duplicate it.
         row1 = st.columns(2)
-        row2 = st.columns(3)
+        row2 = st.columns(2)
         row1[0].metric("Grade A", grade_a, delta=deltas["a"])
         row1[1].metric("Grade F", grade_f, delta=deltas["f"], delta_color="inverse")
-        row2[0].metric("Average score", f"{avg:.1f}", delta=deltas["avg"])
-        row2[1].metric("Stale repos", stale, delta=deltas["stale"], delta_color="inverse")
-        row2[2].metric(
+        row2[0].metric("Stale repos", stale, delta=deltas["stale"], delta_color="inverse")
+        row2[1].metric(
             "Score coverage",
             f"{avg_coverage:.0%}",
             help="Fraction of total metric weight computable from this snapshot. "

@@ -155,13 +155,19 @@ _BASE_CSS = f"""
     font-variant-numeric: tabular-nums;
   }}
 
-  /* st.metric — card surface */
+  /* st.metric — card surface. Fixed min-height + full-height so tiles in a
+     grid stay the same size whether or not they carry a delta/help row. */
   div[data-testid="stMetric"] {{
     background: var(--color-surface-alt);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-card);
     padding: 16px 20px;
     border: 1px solid var(--color-border);
+    height: 100%;
+    min-height: 116px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }}
   div[data-testid="stMetricLabel"] {{ color: var(--color-muted); font-weight: 500; }}
   div[data-testid="stMetricValue"] {{ color: var(--color-text); font-weight: 700; }}
