@@ -20,3 +20,44 @@ checks:
     title: "Read the Docs Config"
     description: "Repository has a Read the Docs configuration file."
     source_url: "https://docs.readthedocs.com/platform/stable/config-file/v2.html"
+  renovate.configured:
+    title: "Renovate Config"
+    description: "Renovate is configured to keep dependencies up to date (alternative to Dependabot)."
+    source_url: "https://docs.renovatebot.com/configuration-options/"
+    scorecard_check: "Dependency-Update-Tool"
+  exists.setup.py:
+    title: "setup.py"
+    description: "Legacy Python packaging entry point. Modern projects may use pyproject.toml instead."
+  exists.pyproject.toml:
+    title: "pyproject.toml"
+    description: "PEP 518/621 build configuration and project metadata — the modern Python packaging standard."
+    source_url: "https://peps.python.org/pep-0621/"
+  exists.tox.ini:
+    title: "tox.ini"
+    description: "Tox configuration for running tests across environments."
+  exists.Makefile:
+    title: "Makefile"
+    description: "Standard make targets (test, quality, upgrade) used across Open edX repos."
+  exists.CHANGELOG.rst:
+    title: "CHANGELOG.rst"
+    description: "A changelog documenting notable changes across releases."
+  exists..pii_annotations.yml:
+    title: "PII Annotations"
+    description: "Declares PII handling as outlined in OEP-30."
+    source_url: "https://open-edx-proposals.readthedocs.io/en/latest/architectural-decisions/oep-0030-arch-pii-markup.html"
+  readme.getting-help:
+    title: "README: Getting Help"
+    description: "README links to the Open edX getting-help resources."
+  readme.security:
+    title: "README: Security Contact"
+    description: "README lists a security contact (security@openedx.org)."
+    chaoss_metric: "Security"
+  readme.bad_links:
+    title: "README: Broken Links"
+    description: "Links in the README that returned an error when checked. Feeds the README quality score."
+  docs.build_badge:
+    title: "Docs Build Badge"
+    description: "README shows a Read the Docs build badge."
+  tox_tox_section:
+    title: "tox [tox] section"
+    description: "tox.ini defines a global [tox] section."
