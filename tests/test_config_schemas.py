@@ -7,6 +7,7 @@ def test_openedx_config_files_validate_against_schemas():
         "data_source",
         "check_groups",
         "check_descriptions",
+        "check_candidates",
         "remediation",
         "pr_templates",
         "scoring",
