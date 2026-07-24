@@ -23,29 +23,55 @@ GRADE_ORDER = ["A", "B", "C", "D", "F"]
 
 
 def _summary_annotation(fig: go.Figure, text: str) -> None:
+    """Add a centered caption above the plot. Charts drop their redundant
+    Plotly title (the surrounding tab already names them), so this sits in the
+    reserved top margin without colliding with a title."""
     fig.add_annotation(
-        x=0, y=1.12, xref="paper", yref="paper",
+        x=0.5, y=1.10, xref="paper", yref="paper",
         text=f"<span style='color:{MUTED};font-size:12px;'>{text}</span>",
-        showarrow=False, align="left", xanchor="left",
+        showarrow=False, xanchor="center",
     )
 
 
 def grade_histogram(df: pd.DataFrame) -> go.Figure:
     counts = df["score_letter"].value_counts().reindex(GRADE_ORDER).fillna(0).astype(int)
     total = int(counts.sum())
-    fig = px.bar(
-        x=counts.index,
-        y=counts.values,
-        color=counts.index,
-        color_discrete_map=GRADE_COLORS,
-        category_orders={"x": GRADE_ORDER},
-        labels={"x": "Grade", "y": "Repositories"},
-        title="Grade distribution",
+    values = counts.values.tolist()
+    pcts = [(100.0 * v / total if total else 0.0) for v in values]
+    bar_labels = [f"<b>{v}</b>  {p:.0f}%" for v, p in zip(values, pcts)]
+
+    fig = go.Figure(
+        go.Bar(
+            x=list(counts.index),
+            y=values,
+            marker={"color": [GRADE_COLORS[g] for g in counts.index], "line": {"width": 0}},
+            text=bar_labels,
+            textposition="outside",
+            textfont={"size": 13, "color": TEXT},
+            cliponaxis=False,
+            customdata=pcts,
+            hovertemplate=(
+                "<b>Grade %{x}</b><br>%{y} repositories"
+                "<br>%{customdata:.1f}% of graded repos<extra></extra>"
+            ),
+        )
     )
-    fig.update_layout(showlegend=False, bargap=0.35)
+
+    ymax = max(values) if values else 1
+    fig.update_layout(
+        showlegend=False,
+        bargap=0.35,
+        margin={"l": 12, "r": 12, "t": 48, "b": 40},
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis={"title": "Grade", "fixedrange": True, "automargin": True},
+        yaxis={"title": "Repositories", "fixedrange": True, "automargin": True,
+               "range": [0, ymax * 1.18 if ymax else 1]},
+        hoverlabel={"bgcolor": SURFACE_ALT, "bordercolor": BORDER},
+    )
     if total:
         ab = int(counts.get("A", 0) + counts.get("B", 0))
-        _summary_annotation(fig, f"{ab}/{total} repos at grade B or better")
+        _summary_annotation(fig, f"{ab}/{total} repos ({100 * ab / total:.0f}%) at grade B or better")
     return fig
 
 
@@ -95,12 +121,26 @@ def category_pass_rate_bar(category_df: pd.DataFrame) -> go.Figure:
         category_df,
         x="category",
         y="pass_rate",
-        title="Per-category pass rate",
         range_y=[0, 100],
         labels={"category": "", "pass_rate": "Pass rate (%)"},
     )
-    fig.update_traces(marker_color=PRIMARY, marker_line_width=0)
-    fig.update_layout(bargap=0.3)
+    fig.update_traces(
+        marker_color=PRIMARY,
+        marker_line_width=0,
+        text=[f"{v:.0f}%" for v in category_df["pass_rate"]] if not category_df.empty else None,
+        textposition="outside",
+        cliponaxis=False,
+        hovertemplate="<b>%{x}</b><br>%{y:.1f}% of checks passing<extra></extra>",
+    )
+    fig.update_layout(
+        bargap=0.3,
+        margin={"l": 8, "r": 8, "t": 48, "b": 8},
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis={"fixedrange": True},
+        yaxis={"fixedrange": True},
+        hoverlabel={"bgcolor": SURFACE_ALT, "bordercolor": BORDER},
+    )
     if not category_df.empty:
         avg = float(category_df["pass_rate"].mean())
         _summary_annotation(fig, f"avg {avg:.0f}% pass · {len(category_df)} categories")
@@ -110,9 +150,7 @@ def category_pass_rate_bar(category_df: pd.DataFrame) -> go.Figure:
 def top_failing_bar(fail_df: pd.DataFrame) -> go.Figure:
     """Lollipop chart of top failing checks."""
     if fail_df.empty:
-        fig = go.Figure()
-        fig.update_layout(title="Top failing checks")
-        return fig
+        return go.Figure()
 
     df = fail_df.copy()
     df = df.iloc[::-1]  # so largest is on top
@@ -143,11 +181,14 @@ def top_failing_bar(fail_df: pd.DataFrame) -> go.Figure:
     )
 
     fig.update_layout(
-        title="Top failing checks",
         showlegend=False,
         height=max(280, 32 * len(checks) + 80),
+        margin={"t": 48},
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         xaxis={"title": "Repos failing", "rangemode": "tozero"},
         yaxis={"title": "", "automargin": True},
+        hoverlabel={"bgcolor": SURFACE_ALT, "bordercolor": BORDER},
     )
     total_fail = int(df["failing"].sum())
     _summary_annotation(fig, f"{total_fail} failures across {len(checks)} checks")
