@@ -6,6 +6,7 @@ hard-coding colors.
 """
 from __future__ import annotations
 
+import html
 from contextlib import contextmanager
 
 import plotly.graph_objects as go
@@ -498,7 +499,19 @@ def render_repo_pill_list(rows: list[tuple[str, float, str]], *, link_fn=None) -
         return
     lines = []
     for repo, score, grade in rows:
-        label = f"[{repo}]({link_fn(repo)})" if link_fn else repo
+        repo_text = html.escape(str(repo))
+        # This list is emitted as raw HTML, so use an <a> tag — markdown link
+        # syntax ("[name](url)") is not parsed inside unsafe_allow_html blocks
+        # and would render as literal text.
+        if link_fn:
+            href = html.escape(str(link_fn(repo)), quote=True)
+            label = (
+                f'<a href="{href}" target="_self" '
+                f'style="color:var(--color-accent);text-decoration:none;font-weight:600;">'
+                f'{repo_text}</a>'
+            )
+        else:
+            label = repo_text
         score_text = f"{score:.1f}" if isinstance(score, (int, float)) else str(score)
         lines.append(
             f'<li style="display:flex;justify-content:space-between;align-items:center;'
