@@ -17,7 +17,7 @@ def load_snapshot() -> pd.DataFrame:
 
 @st.cache_data(ttl=86400)
 def load_history(days: int | None = None) -> list[Snapshot]:
-    """Load historical CSV snapshots from GitHub commit history (cached)."""
+    """Load historical snapshots from the pre-computed history file (cached)."""
     return _load_history(days=days)
 
 def load_my_repos(handle: str) -> pd.DataFrame:

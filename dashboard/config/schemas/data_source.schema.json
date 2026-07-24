@@ -7,6 +7,8 @@
     "data_source_url": {"type": "string"},
     "history_repo": {"type": "string"},
     "history_path": {"type": "string"},
+    "history_file": {"type": "string"},
+    "history_csv_url": {"type": "string"},
     "history_days": {"type": "integer", "minimum": 1},
     "cache_ttl_seconds": {"type": "integer", "minimum": 1},
     "fallback_to_last_known_good": {"type": "boolean"},

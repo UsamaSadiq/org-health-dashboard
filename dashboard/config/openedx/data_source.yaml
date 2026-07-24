@@ -2,6 +2,11 @@ csv_url: "https://raw.githubusercontent.com/openedx/wg-maintenance/main/dashboar
 data_source_url: "https://raw.githubusercontent.com/openedx/wg-maintenance/main/dashboards/dashboard_main.csv"
 history_repo: "openedx/wg-maintenance"
 history_path: "dashboards/dashboard_main.csv"
+# Pre-computed accumulated history file (one block of rows per snapshot date,
+# each row carrying its own TIMESTAMP). Read as a single static-file fetch so
+# the dashboard makes no GitHub API calls at runtime. Set history_csv_url to
+# override the derived raw URL (repo main branch + history_file).
+history_file: "dashboards/dashboard_history.csv"
 history_days: 90
 cache_ttl_seconds: 300
 fallback_to_last_known_good: true
