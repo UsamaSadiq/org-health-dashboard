@@ -184,7 +184,16 @@ def _metric_score(
     if metric_name == "dependency_freshness":
         return _score_dependency_freshness(row)
 
-    # Generic threshold-based numeric metric handler.
+    if metric_name == "pr_response_time":
+        # Median seconds to first response — lower is better, so score by an
+        # ascending "max" ceiling rather than the higher-is-better handler.
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return float(cfg.get("default_when_missing", 50))
+        return _score_by_max_threshold(numeric, cfg.get("thresholds", []), default=0)
+
+    # Generic threshold-based numeric metric handler (higher is better).
     try:
         numeric = float(value)
         return _score_by_threshold(numeric, cfg.get("thresholds", []), default=50)
@@ -204,6 +213,21 @@ def _score_by_threshold(value: float, thresholds: list[dict[str, Any]], default:
         return default
     for item in sorted(thresholds, key=lambda entry: float(entry.get("min", 0)), reverse=True):
         if value >= float(item.get("min", 0)):
+            return float(item.get("score", default))
+    return float(default)
+
+
+def _score_by_max_threshold(value: float, thresholds: list[dict[str, Any]], default: float) -> float:
+    """Score a lower-is-better numeric against ascending ``max`` ceilings.
+
+    Returns the score of the first threshold whose ``max`` the value is at or
+    below (thresholds sorted ascending). Falls through to ``default`` when the
+    value exceeds every ceiling.
+    """
+    if not thresholds:
+        return default
+    for item in sorted(thresholds, key=lambda entry: float(entry.get("max", 0))):
+        if value <= float(item.get("max", 0)):
             return float(item.get("score", default))
     return float(default)
 

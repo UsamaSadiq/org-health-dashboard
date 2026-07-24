@@ -223,7 +223,7 @@ def render() -> None:
     sum_c.metric("Structural", f"{structural:.1f}" if structural is not None else "—",
                  help="Baseline compliance: README, CI, openedx.yaml, deps.")
     sum_d.metric("Activity", f"{activity:.1f}" if activity is not None else "—",
-                 help="Commit recency only — PR response time, release frequency, and contributor signals are not yet collected.")
+                 help="Commit recency, PR response time, PR closure ratio, release frequency, and contributor signals (each scored when present in the snapshot).")
     sum_e.metric("Scoring config", str(repo_row.get("score_config_version", "unknown")))
 
     share_link_block(

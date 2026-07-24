@@ -25,8 +25,10 @@ metrics:
     weight: 0.15
     category: "activity"
     column: "github.median_pr_response_seconds"
-    parse_rule: "threshold_numeric"
-    status: "unavailable"
+    parse_rule: "threshold_max_seconds"  # lower is better; scored by ascending max ceilings
+    # Provisional thresholds (pending maintainer sign-off): ≤1d/3d/7d/30d.
+    thresholds: [{max: 86400, score: 100}, {max: 259200, score: 80}, {max: 604800, score: 50}, {max: 2592000, score: 20}]
+    status: "computable"
     default_when_missing: 50
     chaoss_metric: "Issue Response Time"
   pr_closure_ratio:
@@ -34,7 +36,9 @@ metrics:
     category: "activity"
     column: "github.pr_closure_ratio_90d"
     parse_rule: "threshold_numeric"
-    status: "unavailable"
+    # Provisional thresholds (pending maintainer sign-off): fraction of PRs closed/merged.
+    thresholds: [{min: 0.8, score: 100}, {min: 0.5, score: 70}, {min: 0.2, score: 40}, {min: 0, score: 20}]
+    status: "computable"
     default_when_missing: 50
     chaoss_metric: "Change Request Closure Ratio"
   release_frequency:
@@ -42,7 +46,9 @@ metrics:
     category: "activity"
     column: "github.release_count_12mo"
     parse_rule: "threshold_numeric"
-    status: "unavailable"
+    # Provisional thresholds (pending maintainer sign-off): releases in last 12 months.
+    thresholds: [{min: 12, score: 100}, {min: 4, score: 80}, {min: 1, score: 50}, {min: 0, score: 20}]
+    status: "computable"
     default_when_missing: 50
     chaoss_metric: "Release Frequency"
   contributor_absence_factor:
@@ -50,7 +56,9 @@ metrics:
     category: "activity"
     column: "github.contributor_count_90d"
     parse_rule: "threshold_numeric"
-    status: "unavailable"
+    # Provisional thresholds (pending maintainer sign-off): distinct authors in last 90 days.
+    thresholds: [{min: 5, score: 100}, {min: 3, score: 80}, {min: 2, score: 60}, {min: 1, score: 30}, {min: 0, score: 0}]
+    status: "computable"
     default_when_missing: 50
     chaoss_metric: "Contributor Absence Factor"
     aliases: ["Bus Factor", "Elephant Factor"]
