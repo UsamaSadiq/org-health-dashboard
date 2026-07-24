@@ -150,66 +150,6 @@ def calculate_scores(
 
 
 # ---------------------------------------------------------------------------
-# Pair-restricted composite for honest A-vs-B comparison
-# ---------------------------------------------------------------------------
-def pair_restricted_composite(
-    row_a: pd.Series,
-    row_b: pd.Series,
-) -> dict[str, Any]:
-    """Composite scores for two repos renormalized over their shared metric set.
-
-    Returns a dict with `score_a`, `score_b`, `metrics`, and `coverage` (the
-    fraction of total metric weight represented by the intersection). When
-    no metrics are shared, scores fall back to each repo's own composite
-    and `metrics` is empty.
-    """
-    metrics_a = row_a.get("score_per_metric", {}) or {}
-    metrics_b = row_b.get("score_per_metric", {}) or {}
-    weights_a = row_a.get("score_per_metric_weight", {}) or {}
-    weights_b = row_b.get("score_per_metric_weight", {}) or {}
-
-    shared = sorted(set(metrics_a.keys()) & set(metrics_b.keys()))
-    if not shared:
-        return {
-            "score_a": float(row_a.get("score_composite", 0.0)),
-            "score_b": float(row_b.get("score_composite", 0.0)),
-            "metrics": [],
-            "coverage": 0.0,
-        }
-
-    weight_total = 0.0
-    sum_a = 0.0
-    sum_b = 0.0
-    for metric in shared:
-        # Use the weight from either side; they're config-driven so should agree.
-        weight = float(weights_a.get(metric, weights_b.get(metric, 0.0)))
-        if weight <= 0:
-            continue
-        weight_total += weight
-        sum_a += float(metrics_a[metric]) * weight
-        sum_b += float(metrics_b[metric]) * weight
-
-    if weight_total == 0:
-        return {
-            "score_a": float(row_a.get("score_composite", 0.0)),
-            "score_b": float(row_b.get("score_composite", 0.0)),
-            "metrics": shared,
-            "coverage": 0.0,
-        }
-
-    config = get_config("scoring")
-    total_configured = sum(float(m.get("weight", 0.0)) for m in config.get("metrics", {}).values())
-    coverage = (weight_total / total_configured) if total_configured else 0.0
-
-    return {
-        "score_a": round(sum_a / weight_total, 2),
-        "score_b": round(sum_b / weight_total, 2),
-        "metrics": shared,
-        "coverage": round(coverage, 4),
-    }
-
-
-# ---------------------------------------------------------------------------
 # Per-metric handlers
 # ---------------------------------------------------------------------------
 def _metric_score(

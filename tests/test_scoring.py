@@ -2,7 +2,7 @@ from datetime import date
 
 import pandas as pd
 
-from dashboard.lib.scoring import calculate_scores, pair_restricted_composite
+from dashboard.lib.scoring import calculate_scores
 
 
 def _sample_frame(**overrides) -> pd.DataFrame:
@@ -52,23 +52,6 @@ def test_commit_recency_uses_snapshot_date_not_wall_clock():
         scored_via_timestamp.iloc[0]["score_per_metric"]["commit_recency"]
         == snapshot_when_fresh.iloc[0]["score_per_metric"]["commit_recency"]
     )
-
-
-def test_pair_restricted_composite_renormalizes_over_intersection():
-    scored = calculate_scores(_sample_frame())
-    row_a = scored.iloc[0]
-
-    # Build a synthetic second row with a different available metric set.
-    row_b = row_a.copy()
-    row_b["score_per_metric"] = {"ci_status": 100.0, "openedx_yaml_compliance": 0.0}
-    row_b["score_per_metric_weight"] = {"ci_status": 0.10, "openedx_yaml_compliance": 0.10}
-    row_b["score_composite"] = 50.0
-
-    result = pair_restricted_composite(row_a, row_b)
-    assert set(result["metrics"]) <= set(row_a["score_per_metric"].keys()) & set(row_b["score_per_metric"].keys())
-    assert 0 <= result["coverage"] <= 1.0
-    assert 0 <= result["score_a"] <= 100
-    assert 0 <= result["score_b"] <= 100
 
 
 def test_structural_and_activity_subscores_emitted():
