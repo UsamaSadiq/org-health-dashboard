@@ -70,6 +70,44 @@ def test_structural_and_activity_subscores_emitted():
     assert lo - 0.01 <= row["score_composite"] <= hi + 0.01
 
 
+def test_activity_metrics_score_when_columns_present():
+    """The four activity metrics are computable and score from their columns."""
+    df = _sample_frame(**{
+        "github.median_pr_response_seconds": 3600,   # 1h → best bucket (<=1d)
+        "github.pr_closure_ratio_90d": 0.9,          # → 100 (>=0.8)
+        "github.release_count_12mo": 6,              # → 80 (>=4)
+        "github.contributor_count_90d": 4,           # → 80 (>=3)
+    })
+    scored = calculate_scores(df)
+    per_metric = scored.iloc[0]["score_per_metric"]
+    assert per_metric["pr_response_time"] == 100.0
+    assert per_metric["pr_closure_ratio"] == 100.0
+    assert per_metric["release_frequency"] == 80.0
+    assert per_metric["contributor_absence_factor"] == 80.0
+    # With all activity columns present, none of the four remain unavailable.
+    unavailable = set(scored.iloc[0]["score_unavailable_metrics"])
+    assert not ({"pr_response_time", "pr_closure_ratio", "release_frequency",
+                 "contributor_absence_factor"} & unavailable)
+
+
+def test_pr_response_time_is_lower_is_better():
+    """A fast median response must outscore a slow one."""
+    fast = calculate_scores(_sample_frame(**{"github.median_pr_response_seconds": 3600}))
+    slow = calculate_scores(_sample_frame(**{"github.median_pr_response_seconds": 5_000_000}))
+    fast_score = fast.iloc[0]["score_per_metric"]["pr_response_time"]
+    slow_score = slow.iloc[0]["score_per_metric"]["pr_response_time"]
+    assert fast_score > slow_score
+
+
+def test_score_by_max_threshold_helper():
+    from dashboard.lib.scoring import _score_by_max_threshold
+
+    thresholds = [{"max": 86400, "score": 100}, {"max": 604800, "score": 50}]
+    assert _score_by_max_threshold(1000, thresholds, default=0) == 100.0
+    assert _score_by_max_threshold(100000, thresholds, default=0) == 50.0
+    assert _score_by_max_threshold(10_000_000, thresholds, default=0) == 0.0
+
+
 def test_letter_grade_boundary_is_half_open():
     """A 79.5 score must land in B, not fall through to F."""
     from dashboard.lib.scoring import _get_letter_grade

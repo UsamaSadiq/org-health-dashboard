@@ -207,8 +207,8 @@ def render_kpi_strip(
         row2[2].metric(
             "Score coverage",
             f"{avg_coverage:.0%}",
-            help="Fraction of total metric weight that is currently computable. "
-                 "Remaining metrics require data not yet collected (e.g. PR response time).",
+            help="Fraction of total metric weight computable from this snapshot. "
+                 "Metrics whose columns are absent from the snapshot are excluded.",
         )
 
         spark = _sparkline(history)
