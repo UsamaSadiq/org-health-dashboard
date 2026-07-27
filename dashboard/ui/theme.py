@@ -1,121 +1,308 @@
 """Design tokens and shared visual primitives for the dashboard.
 
 Single source of truth for palette, typography scale, Plotly templating, and
-small HTML helpers (grade pills). All UI modules import from here rather than
-hard-coding colors.
+small HTML helpers (grade pills). All UI modules resolve colours through
+:func:`palette` rather than hard-coding them.
+
+**Why a palette object rather than module constants.** The dark-mode toggle used
+to be decorative. ``apply_base_style()`` emitted
+``<script>document.documentElement.setAttribute('data-theme', …)</script>`` via
+``st.markdown``, and browsers do not execute scripts inserted as ``innerHTML``,
+so the attribute was never set: verified null both before and after toggling.
+Every ``[data-theme="dark"]`` rule in this file was therefore dead code, and the
+toggle visibly flipped while nothing changed.
+
+The fix cannot be "set the attribute properly", because Plotly figures are not
+styled by CSS at all — they bake colours in at construction time. So a theme
+switch has to change *values*, not just selectors. Colours that vary by theme
+live on :class:`Palette`; :func:`apply_base_style` emits the active palette's
+values into ``:root``, and :func:`register_plotly_template` rebuilds the chart
+template from the same object. Module-level colour constants were removed on
+purpose: imported by value at module load, they could not follow the theme and
+would silently render light-theme charts on a dark page.
+
+Semantic and brand hues shift between themes too. The light theme's ``#15803D``
+green and ``#0F4C5C`` primary are close to unreadable on a dark surface, so the
+dark palette substitutes lighter variants rather than reusing them.
 """
 from __future__ import annotations
 
 import html
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 
 import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
 
-# ---------------------------------------------------------------------------
-# Palette (Modernized Open edX, WCAG AA against Surface)
-# ---------------------------------------------------------------------------
-PRIMARY = "#0F4C5C"
-PRIMARY_DARK = "#0A3642"  # ~10% darker for sidebar gradient
-ACCENT = "#14B8A6"
-PASS = "#15803D"
-WARN = "#D97706"
-FAIL = "#B91C1C"
-TEXT = "#0F172A"
-MUTED = "#475569"
-PAGE = "#F1F5F9"
-SURFACE = "#F8FAFC"
-SURFACE_ALT = "#FFFFFF"
-BORDER = "#E2E8F0"
+# Session-state key written by the sidebar toggle in dashboard/ui/filters.py.
+THEME_STATE_KEY = "theme_dark"
 
-GRADE_COLORS = {
-    "A": PASS,
-    "B": "#16A34A",
-    "C": WARN,
-    "D": "#EA580C",
-    "F": FAIL,
-}
 
-GRADE_TEXT_COLORS = {
-    "A": "#FFFFFF",
-    "B": "#FFFFFF",
-    "C": "#111827",
-    "D": "#FFFFFF",
-    "F": "#FFFFFF",
-}
+def _rgba(hex_color: str, alpha: float) -> str:
+    """CSS rgba() string from a #rrggbb hex and an alpha.
 
-# Sequential/categorical palette for charts that need more than status colors.
-CATEGORICAL = [PRIMARY, ACCENT, "#7C3AED", "#0EA5E9", WARN, FAIL, MUTED]
+    Chip and dot backgrounds are tints of their own foreground colour, so they
+    have to be derived from the active palette rather than written as literals.
+    """
+    value = hex_color.lstrip("#")
+    r, g, b = (int(value[i : i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r}, {g}, {b}, {alpha})"
 
-# Status keyword → color, used by tables and badges.
-STATUS_COLORS = {
-    "pass": PASS,
-    "fail": FAIL,
-    "warn": WARN,
-    "unknown": MUTED,
-}
+
+@dataclass(frozen=True)
+class Palette:
+    """Every colour that varies between light and dark.
+
+    Fields are plain hex strings so they can be used both in generated CSS and
+    in Plotly figure construction, which accepts no CSS variables.
+    """
+
+    name: str
+
+    # Brand
+    primary: str
+    primary_dark: str
+    accent: str
+
+    # Semantic
+    success: str
+    warn: str
+    fail: str
+
+    # Surfaces and type
+    text: str
+    muted: str
+    page: str
+    surface: str
+    surface_alt: str
+    border: str
+
+    # Sidebar text sits on the primary gradient in both themes, so it is fixed
+    # rather than derived from `text`.
+    on_primary: str
+
+    # The sidebar gradient is declared explicitly rather than derived from
+    # `primary`: the dark palette's primary is a light teal (readable on a dark
+    # page), and reusing it here would turn the sidebar bright.
+    sidebar_from: str
+    sidebar_to: str
+
+    grade_colors: dict[str, str]
+    grade_text_colors: dict[str, str]
+    categorical: list[str] = field(default_factory=list)
+
+    @property
+    def status_colors(self) -> dict[str, str]:
+        """Status keyword to colour, used by tables and badges."""
+        return {
+            "pass": self.success,
+            "fail": self.fail,
+            "warn": self.warn,
+            "unknown": self.muted,
+            # Distinct from "unknown": a metric whose column exists but whose
+            # value was absent, so the score fell back to its default.
+            "nodata": self.muted,
+        }
+
+    @property
+    def is_dark(self) -> bool:
+        return self.name == "dark"
+
+
+LIGHT = Palette(
+    name="light",
+    primary="#0F4C5C",
+    primary_dark="#0A3642",
+    accent="#14B8A6",
+    success="#15803D",
+    warn="#D97706",
+    fail="#B91C1C",
+    text="#0F172A",
+    muted="#475569",
+    page="#F1F5F9",
+    surface="#F8FAFC",
+    surface_alt="#FFFFFF",
+    border="#E2E8F0",
+    on_primary="#FFFFFF",
+    sidebar_from="#0F4C5C",
+    sidebar_to="#0A3642",
+    grade_colors={
+        "A": "#15803D",
+        "B": "#16A34A",
+        "C": "#D97706",
+        "D": "#EA580C",
+        "F": "#B91C1C",
+    },
+    grade_text_colors={
+        "A": "#FFFFFF",
+        "B": "#FFFFFF",
+        "C": "#111827",
+        "D": "#FFFFFF",
+        "F": "#FFFFFF",
+    },
+    categorical=["#0F4C5C", "#14B8A6", "#7C3AED", "#0EA5E9", "#D97706", "#B91C1C", "#475569"],
+)
+
+# Dark is not the light palette with an inverted background. The deep teal
+# primary and the dark semantic greens/reds fail against a dark surface, so each
+# is replaced by a lighter sibling. Grade fills become light pastels, which flips
+# their pill text to dark.
+DARK = Palette(
+    name="dark",
+    primary="#2DD4BF",
+    primary_dark="#0A3642",
+    accent="#2DD4BF",
+    success="#4ADE80",
+    warn="#FBBF24",
+    fail="#F87171",
+    text="#F1F5F9",
+    muted="#94A3B8",
+    page="#0F172A",
+    surface="#1E293B",
+    surface_alt="#1E293B",
+    border="#334155",
+    on_primary="#FFFFFF",
+    sidebar_from="#0A3642",
+    sidebar_to="#071F27",
+    grade_colors={
+        "A": "#4ADE80",
+        "B": "#34D399",
+        "C": "#FBBF24",
+        "D": "#FB923C",
+        "F": "#F87171",
+    },
+    grade_text_colors={
+        # Every dark-theme grade fill is light, so all pill text is dark.
+        "A": "#0F172A",
+        "B": "#0F172A",
+        "C": "#0F172A",
+        "D": "#0F172A",
+        "F": "#0F172A",
+    },
+    categorical=["#2DD4BF", "#38BDF8", "#A78BFA", "#4ADE80", "#FBBF24", "#F87171", "#94A3B8"],
+)
+
+GRADE_ORDER = ["A", "B", "C", "D", "F"]
 
 PLOTLY_TEMPLATE_NAME = "openedx_health"
 
 
-def _build_plotly_template() -> go.layout.Template:
+def is_dark() -> bool:
+    """True when the viewer has switched the dark toggle on.
+
+    Reads session state directly rather than taking a parameter so that any
+    module can resolve the active theme without threading it through call
+    signatures. Safe outside a Streamlit run (returns False).
+    """
+    try:
+        return bool(st.session_state.get(THEME_STATE_KEY, False))
+    except Exception:  # noqa: BLE001 - no script run context (tests, tooling)
+        return False
+
+
+def palette() -> Palette:
+    """The active palette. Call this inside functions, never at import time."""
+    return DARK if is_dark() else LIGHT
+
+
+# ---------------------------------------------------------------------------
+# Plotly
+# ---------------------------------------------------------------------------
+def _build_plotly_template(p: Palette) -> go.layout.Template:
     template = go.layout.Template()
     template.layout = go.Layout(
-        font={"family": "Inter, system-ui, -apple-system, sans-serif", "color": TEXT, "size": 13},
-        title={"font": {"size": 16, "color": TEXT}},
-        colorway=CATEGORICAL,
-        paper_bgcolor=SURFACE_ALT,
-        plot_bgcolor=PAGE,
+        font={"family": "Inter, system-ui, -apple-system, sans-serif", "color": p.text, "size": 13},
+        title={"font": {"size": 16, "color": p.text}},
+        colorway=p.categorical,
+        paper_bgcolor=p.surface_alt,
+        plot_bgcolor=p.page,
         margin={"l": 48, "r": 24, "t": 56, "b": 48},
         bargap=0.3,
         xaxis={
             "showgrid": False,
-            "gridcolor": BORDER,
+            "gridcolor": p.border,
             "linecolor": "rgba(0,0,0,0)",
-            "zerolinecolor": BORDER,
-            "title": {"font": {"color": MUTED}},
-            "tickfont": {"color": MUTED},
+            "zerolinecolor": p.border,
+            "title": {"font": {"color": p.muted}},
+            "tickfont": {"color": p.muted},
         },
         yaxis={
             "showgrid": True,
-            "gridcolor": BORDER,
+            "gridcolor": p.border,
             "linecolor": "rgba(0,0,0,0)",
-            "zerolinecolor": BORDER,
-            "title": {"font": {"color": MUTED}},
-            "tickfont": {"color": MUTED},
+            "zerolinecolor": p.border,
+            "title": {"font": {"color": p.muted}},
+            "tickfont": {"color": p.muted},
         },
-        legend={"bgcolor": "rgba(0,0,0,0)", "bordercolor": BORDER, "borderwidth": 0},
-        hoverlabel={"bgcolor": SURFACE_ALT, "bordercolor": BORDER, "font": {"color": TEXT}},
+        legend={"bgcolor": "rgba(0,0,0,0)", "bordercolor": p.border, "borderwidth": 0},
+        hoverlabel={"bgcolor": p.surface_alt, "bordercolor": p.border, "font": {"color": p.text}},
     )
     return template
 
 
-def register_plotly_template() -> None:
-    pio.templates[PLOTLY_TEMPLATE_NAME] = _build_plotly_template()
+def register_plotly_template(p: Palette | None = None) -> None:
+    """Install the chart template for a palette and make it the default.
+
+    Must be re-run whenever the theme changes: Plotly resolves the template at
+    figure-construction time, so a stale template produces light-theme charts on
+    a dark page. ``apply_base_style()`` calls this on every run.
+    """
+    active = p or palette()
+    pio.templates[PLOTLY_TEMPLATE_NAME] = _build_plotly_template(active)
     pio.templates.default = PLOTLY_TEMPLATE_NAME
 
 
 # ---------------------------------------------------------------------------
 # CSS
 # ---------------------------------------------------------------------------
-_BASE_CSS = f"""
+def _base_css(p: Palette) -> str:
+    """Render the stylesheet for a palette.
+
+    Everything theme-dependent is emitted as a custom property on ``:root``, so
+    the rules below are written once and follow whichever palette was passed.
+    This replaces the previous approach of shipping both themes and switching a
+    ``data-theme`` attribute, which never worked (see the module docstring).
+    """
+    shadow = (
+        "0 1px 2px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.4)"
+        if p.is_dark
+        else "0 1px 2px rgba(15,23,42,.04), 0 4px 12px rgba(15,23,42,.06)"
+    )
+    shadow_hi = (
+        "0 2px 4px rgba(0,0,0,.4), 0 10px 24px rgba(0,0,0,.5)"
+        if p.is_dark
+        else "0 2px 4px rgba(15,23,42,.06), 0 10px 24px rgba(15,23,42,.10)"
+    )
+    hero_gradient = (
+        f"linear-gradient(135deg, {p.surface_alt} 0%, #24344B 100%)"
+        if p.is_dark
+        else f"linear-gradient(135deg, {p.surface_alt} 0%, #FAFCFE 100%)"
+    )
+
+    grade_rules = "\n".join(
+        f"  .grade-{letter.lower()} {{ background: {p.grade_colors[letter]}; "
+        f"color: {p.grade_text_colors[letter]}; }}"
+        for letter in GRADE_ORDER
+    )
+
+    return f"""
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
   :root {{
-    --color-primary: {PRIMARY};
-    --color-primary-dark: {PRIMARY_DARK};
-    --color-accent: {ACCENT};
-    --color-pass: {PASS};
-    --color-warn: {WARN};
-    --color-fail: {FAIL};
-    --color-text: {TEXT};
-    --color-muted: {MUTED};
-    --color-page: {PAGE};
-    --color-surface: {SURFACE};
-    --color-surface-alt: {SURFACE_ALT};
-    --color-border: {BORDER};
+    --color-primary: {p.primary};
+    --color-primary-dark: {p.primary_dark};
+    --color-accent: {p.accent};
+    --color-pass: {p.success};
+    --color-warn: {p.warn};
+    --color-fail: {p.fail};
+    --color-text: {p.text};
+    --color-muted: {p.muted};
+    --color-page: {p.page};
+    --color-surface: {p.surface};
+    --color-surface-alt: {p.surface_alt};
+    --color-border: {p.border};
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 14px;
@@ -124,8 +311,8 @@ _BASE_CSS = f"""
     --space-3: 12px;
     --space-4: 16px;
     --space-6: 24px;
-    --shadow-card: 0 1px 2px rgba(15,23,42,.04), 0 4px 12px rgba(15,23,42,.06);
-    --shadow-card-hi: 0 2px 4px rgba(15,23,42,.06), 0 10px 24px rgba(15,23,42,.10);
+    --shadow-card: {shadow};
+    --shadow-card-hi: {shadow_hi};
   }}
 
   /* Scope Inter only to content we own. Never use [class*="st-"] or button
@@ -140,12 +327,37 @@ _BASE_CSS = f"""
 
   .stApp {{ background-color: var(--color-page); }}
 
+  /* Streamlit's own header is a sibling of the scroll container with its own
+     opaque background, so .stApp does not cover it. Left alone it renders as a
+     light strip across the top of a dark page. */
+  header[data-testid="stHeader"] {{
+    background: var(--color-page) !important;
+  }}
+
+  /* Main-area form controls. The sidebar has its own treatment further down
+     (it sits on the primary gradient in both themes); these are the widgets on
+     the page body, which otherwise keep Streamlit's light chrome. */
+  [data-testid="stMain"] input,
+  [data-testid="stMain"] textarea,
+  [data-testid="stMain"] [data-baseweb="select"] > div {{
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    border-color: var(--color-border);
+  }}
+  [data-testid="stMain"] input::placeholder,
+  [data-testid="stMain"] textarea::placeholder {{
+    color: var(--color-muted);
+    opacity: 1;
+  }}
+
   .block-container {{ padding-top: 2rem; }}
 
   /* Typography rhythm */
   h1 {{ font-weight: 700; letter-spacing: -0.02em; font-size: 1.75rem; color: var(--color-text); }}
   h2 {{ font-weight: 600; letter-spacing: -0.015em; font-size: 1.35rem; color: var(--color-text); }}
   h3 {{ font-weight: 600; letter-spacing: -0.01em; font-size: 1.1rem; color: var(--color-text); }}
+  h4, h5, h6 {{ color: var(--color-text); }}
+  p, li, .stMarkdown {{ color: var(--color-text); }}
 
   /* Tabular numerals for numeric UI */
   [data-testid="stMetricValue"],
@@ -190,7 +402,7 @@ _BASE_CSS = f"""
 
   /* Sidebar identity */
   section[data-testid="stSidebar"] {{
-    background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+    background: linear-gradient(180deg, {p.sidebar_from} 0%, {p.sidebar_to} 100%);
   }}
   /* Text color for sidebar content — scoped to text-bearing elements so we
      don't recolor backgrounds, dots, or icons inside nav items/chips. */
@@ -204,12 +416,12 @@ _BASE_CSS = f"""
   section[data-testid="stSidebar"] a,
   section[data-testid="stSidebar"] li,
   section[data-testid="stSidebar"] .stMarkdown {{
-    color: #FFFFFF;
+    color: {p.on_primary};
   }}
   /* Only colour non-nav spans (e.g. freshness chip text); leave nav link
      spans alone so Material icon glyphs don't bleed over the label. */
   section[data-testid="stSidebar"] span:not([data-testid="stSidebarNavLink"] span):not([data-testid="stSidebarNavLinkContainer"] span) {{
-    color: #FFFFFF;
+    color: {p.on_primary};
   }}
 
   /* ── Sidebar navigation links ─────────────────────────────────────────── */
@@ -313,12 +525,6 @@ _BASE_CSS = f"""
     color: #FFFFFF !important;
     border-color: rgba(255,255,255,0.20) !important;
   }}
-  section[data-testid="stSidebar"] h1,
-  section[data-testid="stSidebar"] h2,
-  section[data-testid="stSidebar"] h3 {{
-    color: #FFFFFF;
-  }}
-
   /* Cards */
   .card {{
     background: var(--color-surface-alt);
@@ -329,7 +535,7 @@ _BASE_CSS = f"""
     border: 1px solid var(--color-border);
   }}
   .card-hero {{
-    background: linear-gradient(135deg, var(--color-surface-alt) 0%, #FAFCFE 100%);
+    background: {hero_gradient};
     box-shadow: var(--shadow-card-hi);
   }}
   .card-empty {{
@@ -365,11 +571,7 @@ _BASE_CSS = f"""
     font-size: 0.85rem;
     line-height: 1;
   }}
-  .grade-a {{ background: {GRADE_COLORS['A']}; color: {GRADE_TEXT_COLORS['A']}; }}
-  .grade-b {{ background: {GRADE_COLORS['B']}; color: {GRADE_TEXT_COLORS['B']}; }}
-  .grade-c {{ background: {GRADE_COLORS['C']}; color: {GRADE_TEXT_COLORS['C']}; }}
-  .grade-d {{ background: {GRADE_COLORS['D']}; color: {GRADE_TEXT_COLORS['D']}; }}
-  .grade-f {{ background: {GRADE_COLORS['F']}; color: {GRADE_TEXT_COLORS['F']}; }}
+{grade_rules}
 
   .status-chip {{
     display: inline-flex;
@@ -381,10 +583,18 @@ _BASE_CSS = f"""
     font-weight: 500;
     border: 1px solid var(--color-border);
   }}
-  .status-pass {{ background: rgba(21, 128, 61, 0.12); color: var(--color-pass); border-color: rgba(21, 128, 61, 0.3); }}
-  .status-fail {{ background: rgba(185, 28, 28, 0.12); color: var(--color-fail); border-color: rgba(185, 28, 28, 0.3); }}
-  .status-warn {{ background: rgba(217, 119, 6, 0.12); color: var(--color-warn); border-color: rgba(217, 119, 6, 0.3); }}
-  .status-unknown {{ background: rgba(71, 85, 105, 0.08); color: var(--color-muted); }}
+  .status-pass {{ background: {_rgba(p.success, 0.12)}; color: {p.success}; border-color: {_rgba(p.success, 0.3)}; }}
+  .status-fail {{ background: {_rgba(p.fail, 0.12)}; color: {p.fail}; border-color: {_rgba(p.fail, 0.3)}; }}
+  .status-warn {{ background: {_rgba(p.warn, 0.12)}; color: {p.warn}; border-color: {_rgba(p.warn, 0.3)}; }}
+  .status-unknown {{ background: {_rgba(p.muted, 0.08)}; color: var(--color-muted); }}
+  /* "No data" is deliberately distinguishable from "unknown" by shape as well
+     as colour, so it does not read as a muted pass. */
+  .status-nodata {{
+    background: transparent;
+    color: var(--color-muted);
+    border-style: dashed;
+    border-color: var(--color-muted);
+  }}
 
   /* Freshness chip (sidebar) */
   .freshness-chip {{
@@ -423,58 +633,20 @@ _BASE_CSS = f"""
       scroll-behavior: auto !important;
     }}
   }}
-
-  /* Dark mode overrides */
-  [data-theme="dark"] {{
-    --color-page: #0F172A;
-    --color-surface: #1E293B;
-    --color-surface-alt: #1E293B;
-    --color-text: #F1F5F9;
-    --color-muted: #94A3B8;
-    --color-border: #334155;
-    --shadow-card: 0 1px 2px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.4);
-    --shadow-card-hi: 0 2px 4px rgba(0,0,0,.4), 0 10px 24px rgba(0,0,0,.5);
-  }}
-  [data-theme="dark"] .stApp {{ background-color: #0F172A; }}
-  [data-theme="dark"] h1,
-  [data-theme="dark"] h2,
-  [data-theme="dark"] h3,
-  [data-theme="dark"] p,
-  [data-theme="dark"] .stMarkdown {{ color: #F1F5F9; }}
-  [data-theme="dark"] div[data-testid="stMetric"],
-  [data-theme="dark"] .card {{
-    background: #1E293B;
-    border-color: #334155;
-  }}
-  [data-theme="dark"] div[data-testid="stMetricLabel"] {{ color: #94A3B8; }}
-  [data-theme="dark"] div[data-testid="stMetricValue"] {{ color: #F1F5F9; }}
 </style>
 """
 
 
-_DARK_TOGGLE_JS = """
-<script>
-(function() {
-  const params = new URLSearchParams(window.location.search);
-  const theme = params.get('__theme_dark') === '1' ? 'dark' : 'light';
-  document.documentElement.setAttribute('data-theme', theme);
-  document.body && document.body.setAttribute('data-theme', theme);
-})();
-</script>
-"""
-
-
 def apply_base_style() -> None:
-    """Inject base CSS and register the Plotly template. Idempotent."""
-    register_plotly_template()
-    st.markdown(_BASE_CSS, unsafe_allow_html=True)
-    dark = bool(st.session_state.get("theme_dark", False))
-    attr = "dark" if dark else "light"
-    st.markdown(
-        f"<script>document.documentElement.setAttribute('data-theme','{attr}');"
-        f"document.body && document.body.setAttribute('data-theme','{attr}');</script>",
-        unsafe_allow_html=True,
-    )
+    """Inject the active palette's CSS and register the matching chart template.
+
+    Called from every page via ``dashboard.ui.page.page_init``. Resolves the
+    theme from session state on each run, so toggling dark mode triggers a rerun
+    that re-emits both the stylesheet and the Plotly template.
+    """
+    active = palette()
+    register_plotly_template(active)
+    st.markdown(_base_css(active), unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -483,7 +655,7 @@ def apply_base_style() -> None:
 def grade_pill(grade: str) -> str:
     """Return an inline grade pill HTML snippet. Always paired with the letter text."""
     grade = (grade or "").strip().upper()
-    cls = f"grade-{grade.lower()}" if grade in GRADE_COLORS else ""
+    cls = f"grade-{grade.lower()}" if grade in GRADE_ORDER else ""
     label = grade or "—"
     return f'<span class="grade-pill {cls}" aria-label="Grade {label}">{label}</span>'
 
@@ -513,6 +685,11 @@ def render_repo_pill_list(rows: list[tuple[str, float, str]], *, link_fn=None) -
         else:
             label = repo_text
         score_text = f"{score:.1f}" if isinstance(score, (int, float)) else str(score)
+        # A long repo name still collides with its own grade pill here (backlog
+        # A11). A first attempt at min-width:0 + ellipsis on the name cell pushed
+        # the pill and score off-screen entirely at 390px, which is worse than
+        # the collision, so the fix is deferred to WP-8 where it can be checked
+        # against the mobile baseline.
         lines.append(
             f'<li style="display:flex;justify-content:space-between;align-items:center;'
             f'padding:6px 0;border-bottom:1px solid var(--color-border);">'
@@ -535,7 +712,7 @@ def share_link_block(url: str, *, label: str = "Share link") -> None:
 def status_chip(status: str, label: str | None = None) -> str:
     """Render a pill with color + text. Color is never the only signal."""
     key = (status or "").strip().lower()
-    if key not in {"pass", "fail", "warn", "unknown"}:
+    if key not in {"pass", "fail", "warn", "unknown", "nodata"}:
         key = "unknown"
     text = label or key.upper()
     return f'<span class="status-chip status-{key}">{text}</span>'

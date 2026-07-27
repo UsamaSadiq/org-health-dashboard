@@ -7,18 +7,14 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.lib.schema import LAST_PUSH_COL, parse_last_push_utc
-from dashboard.ui.theme import (
-    ACCENT,
-    BORDER,
-    FAIL,
-    GRADE_COLORS,
-    MUTED,
-    PASS,
-    PRIMARY,
-    SURFACE_ALT,
-    TEXT,
-    WARN,
-)
+from dashboard.ui.theme import palette
+
+
+def _tint(hex_color: str, alpha: float = 0.12) -> str:
+    """Translucent version of a grade colour, for the gauge's background bands."""
+    value = hex_color.lstrip("#")
+    r, g, b = (int(value[i : i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r}, {g}, {b}, {alpha})"
 
 
 def _delta_str(value: float | int | None) -> str | None:
@@ -46,8 +42,9 @@ def _letter_from_score(score: float) -> str:
 
 
 def _gauge_figure(avg: float) -> go.Figure:
+    p = palette()
     letter = _letter_from_score(avg)
-    color = GRADE_COLORS.get(letter, PRIMARY)
+    color = p.grade_colors.get(letter, p.primary)
 
     # mode="gauge" (no auto number) so the value and grade can be placed as
     # separate, non-overlapping annotations inside the arc.
@@ -56,16 +53,16 @@ def _gauge_figure(avg: float) -> go.Figure:
             mode="gauge",
             value=round(avg, 1),
             gauge={
-                "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": BORDER, "tickfont": {"color": MUTED}},
+                "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": p.border, "tickfont": {"color": p.muted}},
                 "bar": {"color": color, "thickness": 0.25},
                 "bgcolor": "rgba(0,0,0,0)",
                 "borderwidth": 0,
                 "steps": [
-                    {"range": [0, 20], "color": "rgba(185, 28, 28, 0.12)"},
-                    {"range": [20, 40], "color": "rgba(234, 88, 12, 0.12)"},
-                    {"range": [40, 60], "color": "rgba(217, 119, 6, 0.12)"},
-                    {"range": [60, 80], "color": "rgba(22, 163, 74, 0.12)"},
-                    {"range": [80, 100], "color": "rgba(21, 128, 61, 0.16)"},
+                    {"range": [0, 20], "color": _tint(p.grade_colors["F"])},
+                    {"range": [20, 40], "color": _tint(p.grade_colors["D"])},
+                    {"range": [40, 60], "color": _tint(p.grade_colors["C"])},
+                    {"range": [60, 80], "color": _tint(p.grade_colors["B"])},
+                    {"range": [80, 100], "color": _tint(p.grade_colors["A"], 0.16)},
                 ],
                 "threshold": {"line": {"color": color, "width": 3}, "thickness": 0.75, "value": avg},
             },
@@ -76,7 +73,7 @@ def _gauge_figure(avg: float) -> go.Figure:
     # Value above, grade below — comfortably separated in the arc's bowl.
     fig.add_annotation(
         x=0.5, y=0.30, xref="paper", yref="paper", showarrow=False,
-        text=f"<b style='font-size:42px;color:{TEXT};'>{avg:.1f}</b>",
+        text=f"<b style='font-size:42px;color:{p.text};'>{avg:.1f}</b>",
     )
     fig.add_annotation(
         x=0.5, y=0.10, xref="paper", yref="paper", showarrow=False,
@@ -108,13 +105,14 @@ def _count_stale(df: pd.DataFrame, stale_hours: int) -> int:
 
 
 def _sparkline(values: list[float]) -> go.Figure | None:
+    p = palette()
     if not values or len(values) < 2:
         return None
     fig = go.Figure(
         go.Scatter(
             y=values,
             mode="lines",
-            line={"color": ACCENT, "width": 2},
+            line={"color": p.accent, "width": 2},
             hoverinfo="skip",
         )
     )

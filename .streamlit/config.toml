@@ -2,6 +2,11 @@
 gatherUsageStats = false
 
 [theme]
+# Streamlit's own widget chrome stays light-based; the dashboard's light/dark
+# switch is driven by dashboard/ui/theme.py, which emits the active palette as
+# CSS custom properties and rebuilds the Plotly template to match. Leaving this
+# pinned keeps native widget internals (dropdown popovers, sliders) consistent
+# instead of mixing Streamlit's dark chrome with our own palette.
 base = "light"
 primaryColor = "#14B8A6"
 backgroundColor = "#F1F5F9"
