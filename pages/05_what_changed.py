@@ -9,10 +9,11 @@ from dashboard.lib.config import get_feature_flags
 from dashboard.lib.share import base_url, share_link
 from dashboard.data import load_history
 from dashboard.lib.trends import summarize_weekly_changes
-from dashboard.ui import share_link_block
+from dashboard.ui import page_init, share_link_block
 
 
 def render() -> None:
+    page_init()
     st.title("What Changed This Week")
 
     try:

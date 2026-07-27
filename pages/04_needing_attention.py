@@ -9,7 +9,7 @@ from dashboard.data import load_config, load_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.schema import parse_last_push_utc
 from dashboard.lib.share import share_link
-from dashboard.ui import share_link_block
+from dashboard.ui import page_init, share_link_block
 
 
 def _repo_tier(repo: str, tiers: dict) -> str:
@@ -21,6 +21,7 @@ def _repo_tier(repo: str, tiers: dict) -> str:
 
 
 def render() -> None:
+    page_init()
     st.title("Repos Needing Attention")
 
     df = calculate_scores(load_snapshot())

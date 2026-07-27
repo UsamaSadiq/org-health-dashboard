@@ -12,7 +12,7 @@ from dashboard.lib.remediation import get_remediation
 from dashboard.lib.scorecard import fetch_scorecard_result
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.share import base_url, share_link
-from dashboard.ui import grade_pill, share_link_block, status_chip
+from dashboard.ui import page_init, grade_pill, share_link_block, status_chip
 from dashboard.ui.charts import sparkline
 
 
@@ -96,7 +96,10 @@ def _repo_sparkline(repo: str, cols: list[str]) -> pd.DataFrame:
 
 def _metric_radar(repo_row: pd.Series) -> go.Figure:
     per_metric = repo_row.get("score_per_metric", {}) or {}
-    unavailable = set(repo_row.get("score_unavailable_metrics", []) or [])
+    # sorted(), not set iteration: a bare set gave hash-order-dependent axis
+    # labels, so the radar's metrics changed position on every server restart
+    # while the polygon stayed identical.
+    unavailable = sorted(set(repo_row.get("score_unavailable_metrics", []) or []))
     labels = list(per_metric.keys()) + [name for name in unavailable if name not in per_metric]
     if not labels:
         labels = ["no_metrics"]
@@ -179,6 +182,7 @@ def _render_check_expander(check: str, repo_row: pd.Series, selected_repo: str, 
 
 
 def render() -> None:
+    page_init()
     st.title("Repository Detail")
 
     feature_flags = get_feature_flags()

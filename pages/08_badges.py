@@ -5,9 +5,14 @@ import streamlit as st
 from dashboard.lib.badge import markdown_badge
 from dashboard.data import load_snapshot
 from dashboard.lib.share import base_url
+from dashboard.ui import page_init, require_feature
 
 
 def render() -> None:
+    page_init()
+    if not require_feature("enable_badge_links", label="Embeddable Badges"):
+        return
+
     st.title("Embeddable Badges")
     st.caption("Phase 2 feature. Generates badge markdown for selected repository.")
 

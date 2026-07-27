@@ -6,9 +6,19 @@ import streamlit as st
 from dashboard.data import load_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.sql import UnsafeQueryError, sanitize_readonly_query
+from dashboard.ui import page_init, require_feature
 
 
 def render() -> None:
+    page_init()
+
+    # Streamlit routes to any file in pages/ by its URL slug regardless of what
+    # streamlit_app.py put in st.navigation(), so this page was reachable — and
+    # fully functional — with enable_sql_page: false. It executes user-supplied
+    # SQL, so it enforces its own flag rather than trusting the nav.
+    if not require_feature("enable_sql_page", label="Ad-hoc SQL"):
+        return
+
     st.title("Ad-hoc SQL")
     st.caption("Phase 2 feature. Read-only SQL over current snapshot with row caps.")
 
