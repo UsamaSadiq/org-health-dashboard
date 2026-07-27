@@ -7,7 +7,7 @@ from dashboard.lib.config import get_feature_flags
 from dashboard.data import load_my_repos, load_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.share import share_link
-from dashboard.ui import share_link_block
+from dashboard.ui import page_init, share_link_block
 
 
 def _normalize_bucket(value: object) -> str:
@@ -64,6 +64,7 @@ def _group_summary(df: pd.DataFrame, column: str) -> pd.DataFrame:
 
 
 def render() -> None:
+    page_init()
     st.title("Maintainer and Working Group Views")
 
     if not get_feature_flags().get("enable_maintainer_views", True):

@@ -3,12 +3,16 @@ from __future__ import annotations
 import streamlit as st
 
 from dashboard.lib.config import get_feature_flags
-from dashboard.ui import apply_base_style, hydrate_from_query_params
 
 st.set_page_config(page_title="Open edX Repo Health", layout="wide")
-apply_base_style()
-hydrate_from_query_params()
 
+# Styling and query-param hydration deliberately live in each page's page_init()
+# rather than here. Streamlit serves any file in pages/ by its filename-derived
+# URL without this script's configuration taking effect, so anything applied
+# here is missing on a direct deep link. See dashboard/ui/page.py.
+#
+# For the same reason the flag checks below only shape the nav; each optional
+# page enforces its own flag via require_feature().
 flags = get_feature_flags()
 
 health_pages = [

@@ -7,10 +7,11 @@ import streamlit as st
 from dashboard.data import load_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.share import share_link
-from dashboard.ui import share_link_block
+from dashboard.ui import page_init, share_link_block
 
 
 def render() -> None:
+    page_init()
     st.title("Failing Checks")
 
     df = calculate_scores(load_snapshot())

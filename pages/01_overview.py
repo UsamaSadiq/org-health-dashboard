@@ -11,6 +11,7 @@ from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
 from dashboard.lib.share import share_link
 from dashboard.data import load_history
 from dashboard.ui import (
+    page_init,
     card,
     render_empty_state,
     render_repo_pill_list,
@@ -98,6 +99,7 @@ def _top_movers(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def render() -> None:
+    page_init()
     df = load_snapshot()
     if df.empty:
         st.title("Open edX Repository Health Dashboard")

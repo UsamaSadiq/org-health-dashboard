@@ -7,6 +7,7 @@ import streamlit as st
 
 from dashboard.data import load_config, load_snapshot
 from dashboard.lib.remediation import missing_remediation_checks
+from dashboard.ui import page_init
 
 PASS_TOKENS = {"true", "1", "yes"}
 FAIL_TOKENS = {"false", "0", "no", "fail", "failing"}
@@ -124,6 +125,7 @@ def _render_candidates() -> None:
 
 
 def render() -> None:
+    page_init()
     st.title("Checks Catalog")
     st.caption(
         "Every health check currently collected, what it measures, whether it "
