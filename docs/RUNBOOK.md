@@ -15,3 +15,97 @@
 
 - Run tests: `python -m pytest -q tests`
 - Run i18n readiness: `python scripts/check_i18n_readiness.py --strict`
+
+## UX audit harness
+
+[scripts/ux_audit.py](../scripts/ux_audit.py) captures screenshots and runs an
+accessibility scan against a real browser. It starts and stops the Streamlit app
+itself, so there is no server to launch first and nothing to clean up after.
+
+### Setup
+
+1. `pip install -r requirements-dev.txt`
+2. `playwright install chromium`
+
+Step 2 downloads the browser binary and is not optional. Without it every mode
+fails at browser launch.
+
+### Modes
+
+Run all four from the repo root:
+
+- `python scripts/ux_audit.py --mode screenshots` captures every page at every
+  viewport into `.ux-audit/current/<viewport>/<page>.png`. Reach for this when
+  you want to look at a change, not to gate it.
+- `python scripts/ux_audit.py --mode a11y` runs the axe-core scan and exits 1 on
+  a blocking violation. See "Accessibility gate" below.
+- `python scripts/ux_audit.py --mode baseline` overwrites the committed
+  reference PNGs in `tests/baseline/<viewport>/<page>.png`.
+- `python scripts/ux_audit.py --mode diff` compares a fresh capture against
+  those baselines, writes diff images to `.ux-audit/diff/`, and exits 1 on a
+  regression. This is the gate to run before opening a PR that touches anything
+  visual.
+
+Everything under `.ux-audit/` is transient and gitignored. Everything under
+`tests/baseline/` is tracked.
+
+### Baseline review workflow
+
+Baselines are reviewed like code. A diff to `tests/baseline/` in a pull request
+is a claim that the visual change is intentional, and a reviewer is expected to
+open the images and agree with that claim.
+
+1. Make the change, then run `--mode diff`.
+2. If it fails, open the diff images and work out why.
+3. Only once the change is understood and wanted, run `--mode baseline` and
+   commit the updated PNGs alongside the code change that justifies them.
+
+Never regenerate baselines to turn a red gate green. That converts a caught
+regression into a committed one, and the commit will read as if someone approved
+it. Investigate first, always.
+
+### Known baseline churn
+
+The dashboard renders the snapshot date and a relative freshness label
+("Stale · 3d ago", from [dashboard/ui/banners.py](../dashboard/ui/banners.py)).
+Both change as the data ages, so a checkout that sat overnight can show diffs in
+those regions with no code change behind them. Expect that noise, confirm it is
+confined to the date and the freshness chip, and move on. It is not a
+regression, and it is not worth chasing.
+
+### After a Streamlit upgrade
+
+Run `--mode diff` immediately and expect sidebar and chart styling breakage.
+`streamlit` is pinned exactly in [requirements.txt](../requirements.txt) for this
+reason, with the full explanation in the comment above the pin: the CSS in
+[dashboard/ui/theme.py](../dashboard/ui/theme.py) targets Streamlit's generated
+`st-emotion-cache-*` classes and `data-testid` selectors, which are free to move
+in a minor release. The failure mode is silent, so the diff is the only warning
+you get.
+
+### Accessibility gate
+
+`--mode a11y` splits axe-core findings in two:
+
+- Violations in markup and CSS we own are blocking and fail the run.
+- Violations baked into Streamlit's own DOM are reported but accepted, through a
+  per-rule allowlist documented in
+  [scripts/uxaudit/a11y.py](../scripts/uxaudit/a11y.py).
+
+The allowlist is per-rule on purpose rather than a severity threshold. A
+threshold set high enough to tolerate Streamlit's own DOM would also silence our
+serious `color-contrast` failures, which is exactly what the gate exists to
+catch. Adding a rule to the allowlist is a deliberate, reviewable act.
+
+**This gate is expected to fail today.** There are real live `color-contrast`
+and `heading-order` violations in our own CSS and markup. They are fixed by WP-8
+and WP-9 in [UX_REMEDIATION_PLAN.md](UX_REMEDIATION_PLAN.md); until then a
+non-zero exit from `--mode a11y` is the accurate answer, not a broken harness.
+
+### Licence note
+
+axe-core 4.10.2 is vendored at `scripts/uxaudit/vendor/axe.min.js` under the
+Mozilla Public License 2.0. It is an unmodified redistribution. Keep the licence
+header at the top of the file intact, and see
+[scripts/uxaudit/vendor/README.md](../scripts/uxaudit/vendor/README.md) for the
+checksum, the upstream source, and the upgrade procedure.

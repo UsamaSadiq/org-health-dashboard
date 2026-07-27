@@ -2,3 +2,7 @@
 __pycache__/
 .cache/
 .env
+# Transient UX audit output: current captures, diff images, reports.
+# The reference PNGs under tests/baseline/ stay tracked - they are reviewed
+# artefacts, and only this directory is throwaway.
+.ux-audit/
