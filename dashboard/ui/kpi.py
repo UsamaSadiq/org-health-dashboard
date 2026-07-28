@@ -41,7 +41,14 @@ def _letter_from_score(score: float) -> str:
     return "F"
 
 
-def _gauge_figure(avg: float) -> go.Figure:
+def _gauge_figure(avg: float, measured_weight: float | None = None) -> go.Figure:
+    """Org-average gauge.
+
+    `measured_weight` (0..1) is the fraction of total metric weight genuinely
+    measured rather than filled from `default_when_missing`. When it is below 1
+    the gauge says so beneath the grade: presenting a confident composite
+    without that caveat was the single least defensible thing on the page.
+    """
     p = palette()
     letter = _letter_from_score(avg)
     color = p.grade_colors.get(letter, p.primary)
@@ -66,25 +73,37 @@ def _gauge_figure(avg: float) -> go.Figure:
                 ],
                 "threshold": {"line": {"color": color, "width": 3}, "thickness": 0.75, "value": avg},
             },
-            domain={"x": [0, 1], "y": [0.20, 1]},
+            domain={"x": [0, 1], "y": [0.24, 1]},
         )
     )
 
     # Value above, grade below — comfortably separated in the arc's bowl.
     fig.add_annotation(
-        x=0.5, y=0.30, xref="paper", yref="paper", showarrow=False,
+        x=0.5, y=0.34, xref="paper", yref="paper", showarrow=False,
         text=f"<b style='font-size:42px;color:{p.text};'>{avg:.1f}</b>",
     )
     fig.add_annotation(
-        x=0.5, y=0.10, xref="paper", yref="paper", showarrow=False,
+        x=0.5, y=0.17, xref="paper", yref="paper", showarrow=False,
         text=f"<b style='font-size:22px;color:{color};'>Grade {letter}</b>",
     )
 
+    # The caveat belongs on the number, not in a tile three columns away. On the
+    # live snapshot this reads 50%, i.e. half the composite is
+    # default_when_missing rather than measurement.
+    if measured_weight is not None and measured_weight < 0.999:
+        fig.add_annotation(
+            x=0.5, y=0.02, xref="paper", yref="paper", showarrow=False,
+            text=(
+                f"<span style='font-size:12px;color:{p.warn};'>"
+                f"based on {measured_weight:.0%} of metric weight</span>"
+            ),
+        )
+
     fig.update_layout(
-        margin={"l": 12, "r": 12, "t": 12, "b": 12},
+        margin={"l": 28, "r": 28, "t": 12, "b": 12},
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        height=280,
+        height=300,
     )
     return fig
 
@@ -161,6 +180,12 @@ def render_kpi_strip(
     grade_f = int((df["score_letter"] == "F").sum())
     stale = _count_stale(df, stale_hours)
     avg_coverage = float(df["score_coverage"].mean()) if "score_coverage" in df.columns and total else 0.0
+    # Fraction of weight actually measured (see dashboard/lib/scoring.py). Falls
+    # back to coverage for frames scored before WP-4 added the column.
+    if "score_measured_weight" in df.columns and total:
+        avg_measured = float(df["score_measured_weight"].mean())
+    else:
+        avg_measured = avg_coverage
 
     deltas: dict[str, str | None] = {
         "total": None, "avg": None, "a": None, "f": None, "stale": None,
@@ -187,7 +212,7 @@ def render_kpi_strip(
             unsafe_allow_html=True,
         )
         st.plotly_chart(
-            _gauge_figure(avg),
+            _gauge_figure(avg, measured_weight=avg_measured),
             width="stretch",
             config={"displayModeBar": False},
         )
@@ -205,10 +230,12 @@ def render_kpi_strip(
         row1[1].metric("Grade F", grade_f, delta=deltas["f"], delta_color="inverse")
         row2[0].metric("Stale repos", stale, delta=deltas["stale"], delta_color="inverse")
         row2[1].metric(
-            "Score coverage",
-            f"{avg_coverage:.0%}",
-            help="Fraction of total metric weight computable from this snapshot. "
-                 "Metrics whose columns are absent from the snapshot are excluded.",
+            "Score measured",
+            f"{avg_measured:.0%}",
+            help="Fraction of total metric weight computed from real values. The "
+                 "remainder falls back to default_when_missing (50), so it moves "
+                 "no repository up or down relative to any other. "
+                 f"Columns present in the snapshot: {avg_coverage:.0%}.",
         )
 
         spark = _sparkline(history)

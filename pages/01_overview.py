@@ -145,6 +145,29 @@ def render() -> None:
         st.warning("No repositories match the current filters.")
         return
 
+    # A composite built half from default_when_missing needs saying out loud,
+    # above the fold, not implying in a tile. See docs/UX_REVIEW_BACKLOG.md B1.
+    measured = (
+        float(working["score_measured_weight"].mean())
+        if "score_measured_weight" in working.columns
+        else 1.0
+    )
+    if measured < 0.8:
+        missing = sorted(
+            {
+                name
+                for metrics in working.get("score_unavailable_metrics", [])
+                if isinstance(metrics, list)
+                for name in metrics
+            }
+        )
+        st.warning(
+            f"**Scores are directional.** Only {measured:.0%} of the scoring weight "
+            f"can be computed from this snapshot; the rest falls back to a fixed "
+            f"default of 50, which moves no repository up or down relative to any "
+            f"other. Not collected: {', '.join(missing) if missing else 'unknown'}."
+        )
+
     # ----------------------------------------------------------- 1. signals
     baseline = _baseline_frame()
     scoped_baseline = filters.apply(baseline) if baseline is not None else None
