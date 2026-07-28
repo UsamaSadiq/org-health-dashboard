@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
 from typing import Any
 
@@ -12,6 +12,29 @@ from dashboard.lib.schema import TIMESTAMP_COL, parse_last_push_utc, parse_snaps
 
 @dataclass(frozen=True)
 class Score:
+    """A repository's score plus how much of it was actually measured.
+
+    Three states are deliberately distinguishable, because collapsing them is
+    how the dashboard came to present a confident number built on constants:
+
+    ``measured``
+        The metric's column exists and held a usable value.
+    ``defaulted``
+        The column exists but the value was absent or unparseable, so
+        ``default_when_missing`` (50 for every metric) was substituted. Before
+        this distinction existed, such a metric was indistinguishable from one
+        that genuinely scored 50.
+    ``unavailable``
+        The column is absent from the snapshot entirely, so the metric was
+        excluded from the weighted average rather than defaulted.
+
+    ``coverage`` counts only the third case, which flattered the score: on the
+    live snapshot it reads 0.5 because four activity metrics have no column at
+    all, and says nothing about blank values in the columns that do exist.
+    ``measured_weight`` is the fraction of total weight genuinely measured, and
+    is the figure the UI should lead with.
+    """
+
     composite: float
     letter: str
     per_metric: dict[str, float]
@@ -22,10 +45,23 @@ class Score:
     structural: float | None  # composite over the structural sub-set (None when empty)
     activity: float | None  # composite over the activity sub-set (None when empty)
     config_version: str
+    # Metrics whose column exists but whose value forced default_when_missing.
+    defaulted_metrics: list[str] = field(default_factory=list)
+    # metric -> "measured" | "defaulted" | "unavailable", for every configured metric.
+    metric_confidence: dict[str, str] = field(default_factory=dict)
+    # 0..1 — fraction of total weight from genuinely measured metrics.
+    measured_weight: float = 0.0
+    # Per-category measured fraction, so the UI can mark a sub-score that is
+    # mostly defaults (Activity currently scores 100.0 off a single metric).
+    category_measured_weight: dict[str, float] = field(default_factory=dict)
 
 
 CATEGORY_STRUCTURAL = "structural"
 CATEGORY_ACTIVITY = "activity"
+
+CONFIDENCE_MEASURED = "measured"
+CONFIDENCE_DEFAULTED = "defaulted"
+CONFIDENCE_UNAVAILABLE = "unavailable"
 
 
 DEFAULT_LETTER_GRADES = {"A": [80, 100], "B": [60, 79], "C": [40, 59], "D": [20, 39], "F": [0, 19]}
@@ -63,6 +99,11 @@ def score_row(
     per_metric_weight: dict[str, float] = {}
     per_metric_category: dict[str, str] = {}
     unavailable: list[str] = []
+    defaulted: list[str] = []
+    confidence: dict[str, str] = {}
+    measured_weight_sum = 0.0
+    category_weight: dict[str, float] = {}
+    category_measured: dict[str, float] = {}
 
     structural_sum = structural_weight = 0.0
     activity_sum = activity_weight = 0.0
@@ -71,18 +112,31 @@ def score_row(
         weight = float(metric_cfg.get("weight", 0))
         total_weight += weight
         category = str(metric_cfg.get("category", "")).lower() or None
+        if category:
+            category_weight[category] = category_weight.get(category, 0.0) + weight
 
         status = metric_cfg.get("status", "unavailable")
         column = metric_cfg.get("column")
         if status != "computable" or not column or column not in columns:
             unavailable.append(metric_name)
+            confidence[metric_name] = CONFIDENCE_UNAVAILABLE
             continue
 
-        metric_score = _metric_score(metric_name, metric_cfg, row.get(column), row, reference_dt=reference_dt)
+        metric_score, was_defaulted = _metric_score(
+            metric_name, metric_cfg, row.get(column), row, reference_dt=reference_dt
+        )
         per_metric[metric_name] = metric_score
         per_metric_weight[metric_name] = weight
         if category:
             per_metric_category[metric_name] = category
+        if was_defaulted:
+            defaulted.append(metric_name)
+            confidence[metric_name] = CONFIDENCE_DEFAULTED
+        else:
+            confidence[metric_name] = CONFIDENCE_MEASURED
+            measured_weight_sum += weight
+            if category:
+                category_measured[category] = category_measured.get(category, 0.0) + weight
         weighted_sum += metric_score * weight
         available_weight += weight
 
@@ -95,6 +149,12 @@ def score_row(
 
     composite = weighted_sum / available_weight if available_weight else 0.0
     coverage = (available_weight / total_weight) if total_weight else 0.0
+    measured = (measured_weight_sum / total_weight) if total_weight else 0.0
+    category_measured_fraction = {
+        name: round(category_measured.get(name, 0.0) / total, 4)
+        for name, total in category_weight.items()
+        if total
+    }
     structural = round(structural_sum / structural_weight, 2) if structural_weight else None
     activity = round(activity_sum / activity_weight, 2) if activity_weight else None
     letter = _get_letter_grade(composite, letter_grades)
@@ -110,6 +170,10 @@ def score_row(
         structural=structural,
         activity=activity,
         config_version=str(config.get("version", "unknown")),
+        defaulted_metrics=defaulted,
+        metric_confidence=confidence,
+        measured_weight=round(float(measured), 4),
+        category_measured_weight=category_measured_fraction,
     )
 
 
@@ -146,6 +210,11 @@ def calculate_scores(
     df["score_structural"] = [score.structural for score in scores]
     df["score_activity"] = [score.activity for score in scores]
     df["score_config_version"] = [score.config_version for score in scores]
+    # Confidence metadata. Adding columns only; no composite or letter changes.
+    df["score_defaulted_metrics"] = [score.defaulted_metrics for score in scores]
+    df["score_metric_confidence"] = [score.metric_confidence for score in scores]
+    df["score_measured_weight"] = [score.measured_weight for score in scores]
+    df["score_category_measured_weight"] = [score.category_measured_weight for score in scores]
     return df
 
 
@@ -159,30 +228,46 @@ def _metric_score(
     row: pd.Series,
     *,
     reference_dt: datetime,
-) -> float:
+) -> tuple[float, bool]:
+    """Score one metric.
+
+    Returns:
+        ``(score, was_defaulted)``. ``was_defaulted`` is True when the column
+        existed but its value was absent or unparseable, so
+        ``default_when_missing`` was substituted. The caller needs this to tell a
+        real 50 from a fallback 50 — without it, a metric backed by no data is
+        indistinguishable from a mediocre one, which is precisely how the org
+        gauge came to read "Grade B" off half a snapshot.
+
+        Note the asymmetry with the boolean handlers below: an *unrecognised*
+        boolean token is a default, but an explicit ``false`` is a measured 0.
+    """
+    default = float(cfg.get("default_when_missing", 50))
+
     if pd.isna(value):
-        return float(cfg.get("default_when_missing", 50))
+        return default, True
 
     if metric_name == "commit_recency":
         pushed = parse_last_push_utc(value)
         if pushed is None:
-            return float(cfg.get("default_when_missing", 50))
+            return default, True
         days = (reference_dt - pushed).days
-        return _score_by_days(days, cfg.get("thresholds", []), default=0)
+        return _score_by_days(days, cfg.get("thresholds", []), default=0), False
 
     if metric_name == "readme_quality":
-        return _score_readme_quality(row)
+        return _score_readme_quality(row), False
 
     if metric_name in {"ci_status", "openedx_yaml_compliance"}:
         as_str = str(value).strip().lower()
         if as_str in {"true", "1", "yes"}:
-            return 100.0
+            return 100.0, False
         if as_str in {"false", "0", "no"}:
-            return 0.0
-        return 50.0
+            return 0.0, False
+        # Neither a pass nor a fail token: no signal, so this is a default.
+        return 50.0, True
 
     if metric_name == "dependency_freshness":
-        return _score_dependency_freshness(row)
+        return _score_dependency_freshness(row), False
 
     if metric_name == "pr_response_time":
         # Median seconds to first response — lower is better, so score by an
@@ -190,15 +275,15 @@ def _metric_score(
         try:
             numeric = float(value)
         except (TypeError, ValueError):
-            return float(cfg.get("default_when_missing", 50))
-        return _score_by_max_threshold(numeric, cfg.get("thresholds", []), default=0)
+            return default, True
+        return _score_by_max_threshold(numeric, cfg.get("thresholds", []), default=0), False
 
     # Generic threshold-based numeric metric handler (higher is better).
     try:
         numeric = float(value)
-        return _score_by_threshold(numeric, cfg.get("thresholds", []), default=50)
     except (TypeError, ValueError):
-        return float(cfg.get("default_when_missing", 50))
+        return default, True
+    return _score_by_threshold(numeric, cfg.get("thresholds", []), default=50), False
 
 
 def _score_by_days(days: int, thresholds: list[dict[str, Any]], default: float) -> float:
