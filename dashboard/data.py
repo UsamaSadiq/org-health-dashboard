@@ -9,11 +9,17 @@ from dashboard.lib.data import (
     load_my_repos as _load_my_repos,
     load_snapshot as _load_snapshot,
 )
+from dashboard.lib.tiers import annotate_tiers
 
 @st.cache_data(ttl=300)
 def load_snapshot() -> pd.DataFrame:
-    """Fetch current snapshot with schema checks and fallback to last-known-good (cached)."""
-    return _load_snapshot()
+    """Fetch current snapshot with schema checks and fallback to last-known-good (cached).
+
+    Tier annotation happens here, once, rather than in each consumer: the
+    sidebar's Tier filter reads a ``repo_tier`` column that the upstream CSV does
+    not provide, so without this the control silently matched nothing.
+    """
+    return annotate_tiers(_load_snapshot())
 
 @st.cache_data(ttl=86400)
 def load_history(days: int | None = None) -> list[Snapshot]:

@@ -9,6 +9,7 @@ from dashboard.data import export_json_payload, load_config, load_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
 from dashboard.lib.share import share_link
+from dashboard.lib.tiers import tier_counts
 from dashboard.data import load_history
 from dashboard.ui import (
     page_init,
@@ -132,6 +133,7 @@ def render() -> None:
         snapshot_date=snapshot_date,
         stale_hours=stale_hours,
         critical_hours=critical_hours,
+        tier_counts=tier_counts(df),
     )
     working = filters.apply(df)
 
