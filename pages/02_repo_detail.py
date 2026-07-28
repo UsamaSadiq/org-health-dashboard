@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 from rapidfuzz import fuzz
 
@@ -13,7 +12,7 @@ from dashboard.lib.scorecard import fetch_scorecard_result
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.share import base_url, share_link
 from dashboard.ui import page_init, grade_pill, share_link_block, status_chip
-from dashboard.ui.charts import sparkline
+from dashboard.ui.charts import metric_score_bar, sparkline
 
 
 CATEGORY_GROUPS: dict[str, callable] = {
@@ -92,24 +91,6 @@ def _repo_sparkline(repo: str, cols: list[str]) -> pd.DataFrame:
             continue
         points.append({"date": entry["date"], "pass_rate": round((pass_count / total) * 100, 2)})
     return pd.DataFrame(points)
-
-
-def _metric_radar(repo_row: pd.Series) -> go.Figure:
-    per_metric = repo_row.get("score_per_metric", {}) or {}
-    # sorted(), not set iteration: a bare set gave hash-order-dependent axis
-    # labels, so the radar's metrics changed position on every server restart
-    # while the polygon stayed identical.
-    unavailable = sorted(set(repo_row.get("score_unavailable_metrics", []) or []))
-    labels = list(per_metric.keys()) + [name for name in unavailable if name not in per_metric]
-    if not labels:
-        labels = ["no_metrics"]
-
-    values = [per_metric.get(label, 100.0 if label in unavailable else 0.0) for label in labels]
-    fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(r=values, theta=labels, fill="toself", name=str(repo_row.get("repo_name", "Selected"))))
-
-    fig.update_layout(polar={"radialaxis": {"visible": True, "range": [0, 100]}}, showlegend=True)
-    return fig
 
 
 def _category_card(category: str, repo: str, row: pd.Series, cols: list[str], *, key_prefix: str) -> dict[str, int]:
@@ -221,14 +202,44 @@ def render() -> None:
     )
     structural = repo_row.get("score_structural")
     activity = repo_row.get("score_activity")
-    sum_a, sum_b, sum_c, sum_d, sum_e = st.columns(5)
+    category_measured = repo_row.get("score_category_measured_weight", {}) or {}
+
+    def _subscore(value: object, category: str, base_help: str) -> tuple[str, str]:
+        """Format a sub-score, refusing to look confident when it isn't.
+
+        Activity renders a hard 100.0 on the live snapshot while four of its five
+        metrics have no column at all, which implies the same confidence as a
+        fully-measured Structural score sitting next to it. Below a majority of
+        measured weight the number is withheld rather than dressed with a
+        footnote nobody reads.
+        """
+        fraction = float(category_measured.get(category, 1.0) or 0.0)
+        if value is None:
+            return "—", f"{base_help} Not computable from this snapshot."
+        if fraction < 0.5:
+            return (
+                "—",
+                f"{base_help} Withheld: only {fraction:.0%} of this category's "
+                f"weight is measured, so the number would be mostly the fixed "
+                f"default of 50.",
+            )
+        suffix = "" if fraction > 0.999 else f" {fraction:.0%} of this category's weight is measured."
+        return f"{float(value):.1f}", base_help + suffix
+
+    struct_text, struct_help = _subscore(
+        structural, "structural", "Baseline compliance: README, CI, openedx.yaml, deps."
+    )
+    act_text, act_help = _subscore(
+        activity,
+        "activity",
+        "Commit recency, PR response time, PR closure ratio, release frequency and contributor signals.",
+    )
+
+    sum_a, sum_b, sum_c, sum_d = st.columns(4)
     sum_a.metric("Composite", f"{repo_row['score_composite']:.1f}")
     sum_b.metric("Grade", repo_row["score_letter"])
-    sum_c.metric("Structural", f"{structural:.1f}" if structural is not None else "—",
-                 help="Baseline compliance: README, CI, openedx.yaml, deps.")
-    sum_d.metric("Activity", f"{activity:.1f}" if activity is not None else "—",
-                 help="Commit recency, PR response time, PR closure ratio, release frequency, and contributor signals (each scored when present in the snapshot).")
-    sum_e.metric("Scoring config", str(repo_row.get("score_config_version", "unknown")))
+    sum_c.metric("Structural", struct_text, help=struct_help)
+    sum_d.metric("Activity", act_text, help=act_help)
 
     share_link_block(
         share_link({"tab": "detail", "repo": selected}),
@@ -236,7 +247,14 @@ def render() -> None:
     )
 
     # ------------------------------------------------------- single-repo view
-    st.plotly_chart(_metric_radar(repo_row), width="stretch", key=f"radar-{selected}")
+    st.plotly_chart(
+        metric_score_bar(repo_row), width="stretch", key=f"metrics-{selected}",
+        config={"displayModeBar": False},
+    )
+    st.caption(
+        f"Scoring config {repo_row.get('score_config_version', 'unknown')} · "
+        "bars show each metric's contribution; unmeasured metrics are marked."
+    )
 
     if feature_flags.get("enable_scorecard_panel", False):
         with st.expander("OpenSSF Scorecard parity", expanded=False):
