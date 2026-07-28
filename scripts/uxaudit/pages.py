@@ -17,10 +17,17 @@ per-page values below are measured, not guessed: Overview and Repo Detail pay
 for charts plus the history load, Failing Checks and the Catalog build large
 tables, the rest are cheap.
 
-Only the seven always-on pages are listed. ``pages/07_sql.py``,
-``08_badges.py`` and ``10_cards.py`` are feature-flagged off by default and
-``99_healthz.py`` is never registered in ``st.navigation``, so none of them are
-reachable in a default checkout and none belong in a baseline.
+Seven pages are listed. ``pages/07_sql.py``, ``08_badges.py`` and
+``10_cards.py`` are feature-flagged off by default and render a "not enabled"
+stub, and ``99_healthz.py`` is a plain-text liveness endpoint, so none belong in
+a visual baseline.
+
+Note that every one of those files *is* still reachable by URL — Streamlit routes
+to anything in ``pages/`` regardless of ``st.navigation`` — which is why each
+gated page enforces its own flag (see ``dashboard/ui/page.py``).
+``ownership_views`` stays in this inventory even though it is now hidden from the
+nav when the snapshot carries no ownership fields: it remains routable, so it
+still deserves regression cover.
 """
 from __future__ import annotations
 

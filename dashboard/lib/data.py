@@ -146,6 +146,31 @@ def _value_matches_handle(value: object, handle: str) -> bool:
     return handle in tokens
 
 
+OWNERSHIP_COLUMNS = [
+    "ownership.owner_name",
+    "ownership.owner",
+    "ownership.theme",
+    "ownership.squad",
+    "ownership.priority",
+]
+
+
+def has_ownership_data(df: pd.DataFrame) -> bool:
+    """True when at least one repository carries any ownership field.
+
+    Used to decide whether the Ownership nav section is worth showing at all.
+    The live snapshot has none of the owner columns and empty theme/squad/priority,
+    so the section rendered a page whose own body read "No owner data found" —
+    shipping an empty top-level section costs more trust than hiding it.
+    """
+    if df.empty:
+        return False
+    for column in OWNERSHIP_COLUMNS:
+        if column in df.columns and df[column].fillna("").astype(str).str.strip().ne("").any():
+            return True
+    return False
+
+
 def load_config(name: str) -> dict[str, Any]:
     """Load configuration by section name."""
     return get_config(name)

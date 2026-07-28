@@ -78,6 +78,23 @@ def _baseline_frame() -> pd.DataFrame | None:
     return calculate_scores(history[0].df)
 
 
+def _history_span() -> tuple[object, object] | None:
+    """First and last snapshot dates actually available, for labelling.
+
+    Charts used to be captioned "30d" regardless of what history existed, and the
+    local cache can be months stale relative to the current snapshot, so a trend
+    line could be labelled as recent while showing May data under a July
+    snapshot. Callers label with the real span instead.
+    """
+    try:
+        history = load_history(days=30)
+    except Exception:
+        return None
+    if len(history) < 2:
+        return None
+    return history[0].timestamp, history[-1].timestamp
+
+
 def _top_movers(frame: pd.DataFrame) -> pd.DataFrame:
     try:
         history = load_history(days=30)
@@ -234,21 +251,50 @@ def render() -> None:
 
     movers = _top_movers(working)
     if not movers.empty:
+        span = _history_span()
+        # Label with the real span. "(30d)" was hardcoded regardless of how much
+        # history existed, and the cached history can be months behind the
+        # snapshot, so the label could claim recency the data did not have.
+        span_label = (
+            f"{span[0].isoformat()} → {span[1].isoformat()}"
+            if span
+            else "available history"
+        )
+        gainers = movers[movers["delta"] > 0].nlargest(5, "delta")
+        # nsmallest with a negative filter, not tail(): sorting descending and
+        # taking the tail labels the five smallest *gains* as losses whenever
+        # every repository improved.
+        losers = movers[movers["delta"] < 0].nsmallest(5, "delta")
+
+        mover_config = {
+            "repo_name": st.column_config.TextColumn("Repository"),
+            "delta": st.column_config.NumberColumn("Change", format="%+.1f"),
+        }
+
         mv_left, mv_right = st.columns(2)
         with mv_left:
-            st.markdown("**Biggest gainers (30d)**")
-            st.dataframe(
-                movers.head(5)[["repo_name", "delta"]],
-                width="stretch",
-                hide_index=True,
-            )
+            st.markdown("**Biggest gainers**")
+            if gainers.empty:
+                st.caption("No repositories improved over this window.")
+            else:
+                st.dataframe(
+                    gainers[["repo_name", "delta"]],
+                    width="stretch",
+                    hide_index=True,
+                    column_config=mover_config,
+                )
         with mv_right:
-            st.markdown("**Biggest losers (30d)**")
-            st.dataframe(
-                movers.tail(5)[["repo_name", "delta"]].sort_values("delta"),
-                width="stretch",
-                hide_index=True,
-            )
+            st.markdown("**Biggest losers**")
+            if losers.empty:
+                st.caption("No repositories declined over this window.")
+            else:
+                st.dataframe(
+                    losers[["repo_name", "delta"]],
+                    width="stretch",
+                    hide_index=True,
+                    column_config=mover_config,
+                )
+        st.caption(f"Composite score change · {span_label}")
 
     # ---------------------------------------- 4. full table (collapsed default)
     with st.expander(f"Full table — {len(ranked)} repos", expanded=False):
