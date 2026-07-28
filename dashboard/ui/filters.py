@@ -51,8 +51,14 @@ def render_sidebar_filters(
     snapshot_date: date | None = None,
     stale_hours: int = 48,
     critical_hours: int = 168,
+    tier_counts: dict[str, int] | None = None,
 ) -> FilterState:
-    """Render the shared filter group in the sidebar. Returns the live state."""
+    """Render the shared filter group in the sidebar. Returns the live state.
+
+    Args:
+        tier_counts: Repositories per tier, from ``dashboard.lib.tiers``. When
+            supplied, tier options carry their counts.
+    """
     with st.sidebar:
         chip_html = freshness_chip_html(snapshot_date, stale_hours, critical_hours)
         st.markdown(
@@ -80,12 +86,23 @@ def render_sidebar_filters(
             if show_archived
             else False
         )
+        # Counts in the labels, including zeros. tiers.yaml classifies only a
+        # handful of repositories today, so "critical (0)" is honest where a bare
+        # "critical" implies a curated list exists.
+        def _tier_label(value: str) -> str:
+            if tier_counts is None:
+                return value.title()
+            if value == "all":
+                return f"All ({sum(tier_counts.values())})"
+            return f"{value.title()} ({tier_counts.get(value, 0)})"
+
         tier = (
             st.selectbox(
                 "Tier",
                 TIER_OPTIONS,
                 index=TIER_OPTIONS.index(st.session_state.get("filter_tier", "all")),
                 key="filter_tier",
+                format_func=_tier_label,
             )
             if show_tier
             else "all"

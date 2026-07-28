@@ -9,15 +9,8 @@ from dashboard.data import load_config, load_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.schema import parse_last_push_utc
 from dashboard.lib.share import share_link
+from dashboard.lib.tiers import TIER_COL, repo_tier
 from dashboard.ui import page_init, share_link_block
-
-
-def _repo_tier(repo: str, tiers: dict) -> str:
-    for tier in ["critical", "important", "standard"]:
-        for configured in tiers.get(tier, []):
-            if repo == configured or repo.endswith("/" + configured):
-                return tier
-    return "standard"
 
 
 def render() -> None:
@@ -37,7 +30,7 @@ def render() -> None:
     rows = []
     for _, row in df.iterrows():
         repo = str(row.get("repo_name", ""))
-        tier = _repo_tier(repo, tiers_cfg)
+        tier = str(row.get(TIER_COL) or repo_tier(repo, tiers_cfg))
         if selected_tier != "all" and tier != selected_tier:
             continue
 
