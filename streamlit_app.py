@@ -24,6 +24,18 @@ health_pages = [
 ]
 
 ownership_pages = []
+# Backlog C4 asked for this section to be hidden when the snapshot carries no
+# ownership fields, on the grounds that an empty top-level section reads as a
+# broken product. Implemented and reverted: a page omitted from st.navigation()
+# stops resolving as a URL, so /ownership_views answered with a "Page not found"
+# modal and fell back to Overview. That breaks every previously shared link to
+# it, which is a worse outcome for a link recipient than an honest empty page —
+# and the cosmetic concern is addressable in the page's own empty state, which
+# is what WP-6 did instead.
+#
+# Genuinely hiding it would mean moving the file out of pages/ so Streamlit's
+# routing never sees it. That is a bigger change and needs a decision about
+# whether the URL should keep working; see docs/UX_REVIEW_BACKLOG.md C4.
 if flags.get("enable_maintainer_views", True):
     ownership_pages.append(
         st.Page("pages/09_ownership_views.py", title="Ownership", icon=":material/groups:")

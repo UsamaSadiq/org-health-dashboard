@@ -14,7 +14,7 @@ from dashboard.ui import page_init, share_link_block
 
 def render() -> None:
     page_init()
-    st.title("What Changed This Week")
+    st.title("What Changed")
 
     try:
         history = load_history(days=30)
@@ -28,6 +28,16 @@ def render() -> None:
     latest = history[-1]
     baseline = history[-2]
     changes = summarize_weekly_changes(latest.df, baseline.df)
+
+    # This compares the two most recent snapshots, which on the intended 6-hourly
+    # cadence is hours apart, not a week. The old title said "This Week" and the
+    # export still calls itself a weekly bulletin; state the real window rather
+    # than implying one. A period selector is WP-12 (backlog D41).
+    st.caption(
+        f"Comparing the two most recent snapshots: "
+        f"{baseline.timestamp.isoformat()} → {latest.timestamp.isoformat()}. "
+        f"{len(history)} snapshots available."
+    )
 
     st.subheader("Newly failing checks")
     if changes["new_failures"].empty:

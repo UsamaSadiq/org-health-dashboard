@@ -85,8 +85,9 @@ def render() -> None:
     )
     if coverage < 20:
         st.warning(
-            "Ownership data coverage is below the PRD trigger threshold (20%). "
-            "Views remain available for early validation."
+            "Ownership data is not yet populated for most repositories, so these "
+            "views are mostly empty. To appear here, a repository needs "
+            "`spec.owner` set in its `catalog-info.yaml` (OEP-55)."
         )
 
     # By Owner is primary (catalog-info). Theme/Squad tabs only appear when the
