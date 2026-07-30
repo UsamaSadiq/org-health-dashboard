@@ -39,13 +39,13 @@ def render() -> None:
         f"{len(history)} snapshots available."
     )
 
-    st.subheader("Newly failing checks")
+    st.header("Newly failing checks")
     if changes["new_failures"].empty:
         st.success("No newly failing checks.")
     else:
         st.dataframe(changes["new_failures"], width="stretch")
 
-    st.subheader("Newly passing checks")
+    st.header("Newly passing checks")
     if changes["new_passes"].empty:
         st.info("No newly passing checks.")
     else:
@@ -59,14 +59,30 @@ def render() -> None:
             dashboard_url=base_url().rstrip("/"),
             commit_sha=commit_sha,
         )
-        st.subheader("Weekly bulletin export")
-        st.code(bulletin, language="markdown")
-        st.download_button(
-            "Download bulletin markdown",
-            data=bulletin.encode("utf-8"),
-            file_name="weekly-bulletin.md",
-            mime="text/markdown",
-        )
+        st.header("Bulletin")
+        # Rendered, not shown as highlighted source. st.code(..., "markdown")
+        # displayed the headings in red monospace, which read as an error rather
+        # than a report, and it produced two accessibility failures: the
+        # syntax-highlight tokens measured 2.4:1, and the resulting <pre>
+        # overflowed at 390px with no keyboard access (backlog D43, F13).
+        with st.container(border=True):
+            st.markdown(bulletin)
+        source_col, download_col = st.columns([3, 2])
+        with source_col:
+            with st.expander("Copy markdown source"):
+                st.text_area(
+                    "Bulletin markdown",
+                    value=bulletin,
+                    height=200,
+                    label_visibility="collapsed",
+                )
+        with download_col:
+            st.download_button(
+                "Download bulletin",
+                data=bulletin.encode("utf-8"),
+                file_name="weekly-bulletin.md",
+                mime="text/markdown",
+            )
 
     share_link_block(share_link({"tab": "what-changed"}), label="Copy link to this view")
 

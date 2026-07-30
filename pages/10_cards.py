@@ -28,7 +28,7 @@ def render() -> None:
 
     st.code("python scripts/generate_phase2_cards.py", language="bash")
 
-    st.subheader("Year in review")
+    st.header("Year in review")
     if YEAR_REVIEW.exists():
         st.success(f"Found generated file: {YEAR_REVIEW.relative_to(ROOT)}")
         st.download_button(
@@ -40,7 +40,7 @@ def render() -> None:
     else:
         st.info("No year-in-review file found yet.")
 
-    st.subheader("Embeddable repo cards")
+    st.header("Embeddable repo cards")
     if EMBEDS_DIR.exists():
         cards = sorted(EMBEDS_DIR.glob("*.html"))
         st.write(f"Generated cards: {len(cards)}")

@@ -294,7 +294,7 @@ def render() -> None:
                     st.dataframe(checks_df.sort_values("check"), width="stretch", hide_index=True)
 
     # ----------------------------------------------------- category cards
-    st.subheader("Category overview")
+    st.header("Category overview")
     categories = _category_columns(df)
     grid_cols = st.columns(min(3, max(1, len(categories))))
     for idx, (category, cols) in enumerate(categories.items()):
@@ -308,7 +308,7 @@ def render() -> None:
     if not check_cols:
         return
 
-    st.subheader("Checks")
+    st.header("Checks")
     control_left, control_right = st.columns([3, 2])
     with control_left:
         filter_choice = st.radio(
