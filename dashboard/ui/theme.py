@@ -88,6 +88,18 @@ class Palette:
     sidebar_from: str
     sidebar_to: str
 
+    # Chip foregrounds are separate from the semantic hues above. A status chip
+    # sits on a 12%-alpha tint of its own colour, so reusing the chart hue put
+    # status-warn at 2.81:1 and status-pass at 4.27:1 against that tint - both
+    # below AA. Charts still need the brighter values, so the two diverge.
+    chip_text: dict[str, str]
+    # Opaque sidebar input fill, and inline-code foreground for main content.
+    sidebar_input_bg: str
+    code_text: str
+    # KPI delta text sits on the card surface. Streamlit's default green is
+    # ~3.04:1 on white.
+    delta_text: str
+
     grade_colors: dict[str, str]
     grade_text_colors: dict[str, str]
     categorical: list[str] = field(default_factory=list)
@@ -127,6 +139,18 @@ LIGHT = Palette(
     on_primary="#FFFFFF",
     sidebar_from="#0F4C5C",
     sidebar_to="#0A3642",
+    # Measured against each chip's computed background: warn 6.25, pass 7.76,
+    # fail 6.80, unknown/nodata 8.66.
+    chip_text={
+        "pass": "#14532D",
+        "warn": "#92400E",
+        "fail": "#991B1B",
+        "unknown": "#334155",
+        "nodata": "#334155",
+    },
+    delta_text="#15803D",  # 5.02 on the white card
+    sidebar_input_bg="#1B5A6B",
+    code_text="#0F172A",
     grade_colors={
         "A": "#15803D",
         "B": "#16A34A",
@@ -134,12 +158,17 @@ LIGHT = Palette(
         "D": "#EA580C",
         "F": "#B91C1C",
     },
+    # Text colour per fill, chosen so each pill clears AA. White only works on
+    # the two darkest fills: it measured 3.30 on B and 3.56 on D. Dark text on
+    # those takes them to 5.38 and 4.98. The fills themselves are unchanged, so
+    # the ramp is untouched; A and B remaining hard to tell apart at pill size is
+    # a separate finding (E11).
     grade_text_colors={
-        "A": "#FFFFFF",
-        "B": "#FFFFFF",
-        "C": "#111827",
-        "D": "#FFFFFF",
-        "F": "#FFFFFF",
+        "A": "#FFFFFF",  # 5.02
+        "B": "#111827",  # 5.38
+        "C": "#111827",  # 5.57
+        "D": "#111827",  # 4.98
+        "F": "#FFFFFF",  # 6.47
     },
     categorical=["#0F4C5C", "#14B8A6", "#7C3AED", "#0EA5E9", "#D97706", "#B91C1C", "#475569"],
 )
@@ -165,6 +194,19 @@ DARK = Palette(
     on_primary="#FFFFFF",
     sidebar_from="#0A3642",
     sidebar_to="#071F27",
+    # On the dark surface the bright hues mostly clear AA on their own tints
+    # (warn 6.78, pass 6.47, muted 4.62); only fail needed lightening, from
+    # #F87171 at 4.46 to #FCA5A5 at 6.51.
+    chip_text={
+        "pass": "#4ADE80",
+        "warn": "#FBBF24",
+        "fail": "#FCA5A5",
+        "unknown": "#94A3B8",
+        "nodata": "#94A3B8",
+    },
+    delta_text="#4ADE80",
+    sidebar_input_bg="#14414F",
+    code_text="#E2E8F0",
     grade_colors={
         "A": "#4ADE80",
         "B": "#34D399",
@@ -384,6 +426,16 @@ def _base_css(p: Palette) -> str:
   }}
   div[data-testid="stMetricLabel"] {{ color: var(--color-muted); font-weight: 500; }}
   div[data-testid="stMetricValue"] {{ color: var(--color-text); font-weight: 700; }}
+  /* Streamlit's default delta green measures ~3.04:1 on the white card, below
+     AA. Both directions are restated against the card surface. The arrow glyph
+     is left alone so direction is not conveyed by colour alone. */
+  div[data-testid="stMetricDelta"] {{ color: {p.delta_text} !important; }}
+  div[data-testid="stMetricDelta"] svg {{ fill: {p.delta_text} !important; }}
+  div[data-testid="stMetricDelta"][data-direction="down"],
+  div[data-testid="stMetricDelta"][data-direction="down"] svg {{
+    color: {p.chip_text["fail"]} !important;
+    fill: {p.chip_text["fail"]} !important;
+  }}
 
   /* Tabs */
   button[role="tab"][aria-selected="true"] {{
@@ -521,9 +573,19 @@ def _base_css(p: Palette) -> str:
   section[data-testid="stSidebar"] input,
   section[data-testid="stSidebar"] select,
   section[data-testid="stSidebar"] [data-baseweb="select"] > div {{
-    background: rgba(255,255,255,0.10) !important;
+    /* Opaque, not rgba(): a translucent fill leaves the computed background
+       ambiguous, and a contrast checker resolves it to the nearest opaque
+       ancestor rather than blending, which reported 1.08 for white-on-white
+       here. This is a fixed mix of the sidebar gradient. */
+    background: {p.sidebar_input_bg} !important;
     color: #FFFFFF !important;
-    border-color: rgba(255,255,255,0.20) !important;
+    border-color: rgba(255,255,255,0.28) !important;
+  }}
+  /* The browser default placeholder colour over a 10%-alpha fill on the teal
+     gradient measured below AA. Stated explicitly instead. */
+  section[data-testid="stSidebar"] input::placeholder {{
+    color: rgba(255,255,255,0.82) !important;
+    opacity: 1;
   }}
   /* Cards */
   .card {{
@@ -557,6 +619,28 @@ def _base_css(p: Palette) -> str:
     background: var(--color-surface-alt);
   }}
 
+  /* Streamlit renders captions at reduced opacity. Opacity creates a stacking
+     context, so a child cannot opt back out: every colour inside a caption is
+     blended toward the background, which took even near-black inline code to
+     4.16:1. Restore full opacity and express the de-emphasis as a colour that
+     clears AA on its own. */
+  [data-testid="stCaptionContainer"],
+  [data-testid="stCaptionContainer"] p {{
+    opacity: 1 !important;
+    color: var(--color-muted) !important;
+  }}
+
+  /* Streamlit renders inline markdown code as ~10.5px in a pale green that
+     measured 2.38:1 on our page surface. Restated against the card colour with
+     a tint that keeps it visually distinct from body text. */
+  [data-testid="stMain"] code {{
+    color: {p.code_text} !important;
+    background: {_rgba(p.muted, 0.10)};
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-size: 0.85em;
+  }}
+
   .small-muted {{ color: var(--color-muted); font-size: 0.9rem; }}
 
   .grade-pill {{
@@ -583,10 +667,10 @@ def _base_css(p: Palette) -> str:
     font-weight: 500;
     border: 1px solid var(--color-border);
   }}
-  .status-pass {{ background: {_rgba(p.success, 0.12)}; color: {p.success}; border-color: {_rgba(p.success, 0.3)}; }}
-  .status-fail {{ background: {_rgba(p.fail, 0.12)}; color: {p.fail}; border-color: {_rgba(p.fail, 0.3)}; }}
-  .status-warn {{ background: {_rgba(p.warn, 0.12)}; color: {p.warn}; border-color: {_rgba(p.warn, 0.3)}; }}
-  .status-unknown {{ background: {_rgba(p.muted, 0.08)}; color: var(--color-muted); }}
+  .status-pass {{ background: {_rgba(p.success, 0.12)}; color: {p.chip_text["pass"]}; border-color: {_rgba(p.success, 0.3)}; }}
+  .status-fail {{ background: {_rgba(p.fail, 0.12)}; color: {p.chip_text["fail"]}; border-color: {_rgba(p.fail, 0.3)}; }}
+  .status-warn {{ background: {_rgba(p.warn, 0.12)}; color: {p.chip_text["warn"]}; border-color: {_rgba(p.warn, 0.3)}; }}
+  .status-unknown {{ background: {_rgba(p.muted, 0.08)}; color: {p.chip_text["unknown"]}; }}
   /* "No data" is deliberately distinguishable from "unknown" by shape as well
      as colour, so it does not read as a muted pass. */
   .status-nodata {{

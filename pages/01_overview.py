@@ -194,7 +194,7 @@ def render() -> None:
     )
 
     # --------------------------------------------------- 1b. grade ribbon
-    st.markdown("##### Grade mix")
+    st.header("Grade mix")
     st.plotly_chart(
         grade_ribbon(working),
         width="stretch",
@@ -226,7 +226,7 @@ def render() -> None:
         "score_composite", ascending=False
     )
 
-    st.subheader(":material/leaderboard: Highlights")
+    st.header(":material/leaderboard: Highlights")
 
     def _repo_link(repo: str) -> str:
         return share_link({"tab": "detail", "repo": repo})

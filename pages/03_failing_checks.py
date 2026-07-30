@@ -40,7 +40,7 @@ def render() -> None:
 
     fail_df = pd.DataFrame(rows).sort_values("fail_count", ascending=False)
 
-    st.subheader("Failing checks distribution")
+    st.header("Failing checks distribution")
     fig = px.bar(
         fail_df,
         x="check",
