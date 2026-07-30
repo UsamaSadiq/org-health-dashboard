@@ -17,15 +17,26 @@ def _tint(hex_color: str, alpha: float = 0.12) -> str:
     return f"rgba({r}, {g}, {b}, {alpha})"
 
 
+# Streamlit hides the delta row entirely for None, which made a genuinely
+# unchanged tile look like a rendering fault next to tiles that had deltas.
+NO_CHANGE = "no change"
+
+
 def _delta_str(value: float | int | None) -> str | None:
+    """Format a KPI delta.
+
+    Returns None only when there is no baseline to compare against. An actual
+    zero (or a float rounding to zero) returns NO_CHANGE, so "unchanged" and
+    "unknown" are visually distinct.
+    """
     if value is None:
         return None
     if isinstance(value, float):
         if abs(value) < 0.05:
-            return None
+            return NO_CHANGE
         return f"{value:+.1f}"
     if value == 0:
-        return None
+        return NO_CHANGE
     return f"{value:+d}"
 
 
@@ -227,7 +238,7 @@ def render_kpi_strip(
             config={"displayModeBar": False},
         )
         snap = snapshot_date.isoformat() if snapshot_date else "unknown"
-        st.caption(f"{total} repos · snapshot {snap}")
+        st.caption(f"{total} repositories · snapshot {snap} (UTC)")
 
     with tiles_col:
         history = _load_org_avg_history(30)

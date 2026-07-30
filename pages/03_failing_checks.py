@@ -77,7 +77,15 @@ def render() -> None:
     st.dataframe(
         result,
         width="stretch",
-        column_config={"repo_link": st.column_config.LinkColumn("Repo Detail Link")},
+        hide_index=True,
+        column_config={
+            "repo_name": st.column_config.TextColumn("Repository"),
+            "score_composite": st.column_config.NumberColumn("Score", format="%.1f"),
+            "score_letter": st.column_config.TextColumn("Grade", width="small"),
+            # display_text keeps the cell readable; the bare URL was truncated
+            # mid-string and told the reader nothing.
+            "repo_link": st.column_config.LinkColumn("Detail", display_text="Open"),
+        },
     )
     share_link_block(
         share_link({"tab": "failing-checks", "category": selected_check or ""}),

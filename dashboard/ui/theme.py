@@ -685,28 +685,59 @@ def render_repo_pill_list(rows: list[tuple[str, float, str]], *, link_fn=None) -
         else:
             label = repo_text
         score_text = f"{score:.1f}" if isinstance(score, (int, float)) else str(score)
-        # A long repo name still collides with its own grade pill here (backlog
-        # A11). A first attempt at min-width:0 + ellipsis on the name cell pushed
-        # the pill and score off-screen entirely at 390px, which is worse than
-        # the collision, so the fix is deferred to WP-8 where it can be checked
-        # against the mobile baseline.
+        # A11. The first attempt put min-width:0 + ellipsis on the name cell
+        # alone, which at 390px pushed the pill and score out of the row: the
+        # longest names lost their grade entirely, and losing data is worse than
+        # overlapping it. The working shape is two explicit tracks — the name
+        # track may shrink and ellipsise (flex:1 1 auto with min-width:0), the
+        # pill track may not (flex:0 0 auto). title= keeps the full name
+        # reachable once truncated.
         lines.append(
             f'<li style="display:flex;justify-content:space-between;align-items:center;'
-            f'padding:6px 0;border-bottom:1px solid var(--color-border);">'
-            f'<span>{label}</span>'
-            f'<span>{grade_pill(grade)} <span class="small-muted">{score_text}</span></span>'
+            f'gap:10px;padding:6px 0;border-bottom:1px solid var(--color-border);'
+            f'width:100%;max-width:100%;box-sizing:border-box;">'
+            f'<span style="flex:1 1 auto;min-width:0;overflow:hidden;'
+            f'text-overflow:ellipsis;white-space:nowrap;" title="{repo_text}">{label}</span>'
+            f'<span style="flex:0 0 auto;white-space:nowrap;">'
+            f'{grade_pill(grade)} <span class="small-muted">{score_text}</span></span>'
             f'</li>'
         )
     st.markdown(
-        f'<ul style="list-style:none;padding-left:0;margin:0;">{"".join(lines)}</ul>',
+        # width/max-width/box-sizing are load-bearing, not decoration: without
+        # them the list sized itself to its widest unbroken repo name (measured
+        # 447px inside a 358px container at a 390px viewport), pushing the grade
+        # pills off-screen. Constraining the list is what lets the per-row
+        # ellipsis in `lines` actually engage.
+        f'<ul style="list-style:none;padding-left:0;margin:0;'
+        f'width:100%;max-width:100%;box-sizing:border-box;">{"".join(lines)}</ul>',
         unsafe_allow_html=True,
     )
 
 
 def share_link_block(url: str, *, label: str = "Share link") -> None:
-    """Render a share URL as a copyable code block instead of an editable input."""
-    st.markdown(f"**{label}**")
-    st.code(url, language="text")
+    """Render a share URL as a compact, copyable, keyboard-reachable field.
+
+    Was a full-width ``st.code`` block, which had three problems: it consumed a
+    prime content slot above the fold just to display a URL, it required manual
+    text selection to copy, and at 390px the resulting ``<pre>`` overflowed
+    horizontally with no ``tabindex``, so a keyboard-only user could neither
+    scroll it nor read the URL (axe ``scrollable-region-focusable``, backlog F13).
+
+    A read-only ``st.text_input`` keeps Streamlit's built-in copy affordance,
+    stays one line tall, and is focusable and scrollable by keyboard.
+    """
+    # Deliberately NOT disabled=True. A disabled input is removed from the tab
+    # order, so it would have failed the very requirement this change exists for,
+    # and its greyed text is a contrast risk. An enabled field is focusable,
+    # scrollable and select-all-copyable; edits go nowhere because the value is
+    # recomputed from the current view on every rerun.
+    st.text_input(
+        label,
+        value=url,
+        label_visibility="collapsed",
+        help=f"{label} (read-only)",
+        key=f"share-{abs(hash(url))}",
+    )
 
 
 def status_chip(status: str, label: str | None = None) -> str:

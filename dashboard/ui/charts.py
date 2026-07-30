@@ -47,7 +47,8 @@ def grade_histogram(df: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         showlegend=False,
         bargap=0.35,
-        margin={"l": 12, "r": 12, "t": 48, "b": 40},
+        # l=12 clipped the rotated y-axis title to "positories".
+        margin={"l": 56, "r": 12, "t": 48, "b": 40},
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         xaxis={"title": "Grade", "fixedrange": True, "automargin": True},
