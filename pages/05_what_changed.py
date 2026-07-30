@@ -35,7 +35,7 @@ def render() -> None:
     # than implying one. A period selector is WP-12 (backlog D41).
     st.caption(
         f"Comparing the two most recent snapshots: "
-        f"{baseline.timestamp.isoformat()} → {latest.timestamp.isoformat()}. "
+        f"{baseline.timestamp.isoformat()} → {latest.timestamp.isoformat()} (UTC). "
         f"{len(history)} snapshots available."
     )
 

@@ -1,6 +1,11 @@
 [browser]
 gatherUsageStats = false
 
+[client]
+# Public read-only dashboard: the Deploy button and developer menu are noise
+# for every visitor and appeared in the top-right of every page.
+toolbarMode = "minimal"
+
 [theme]
 # Streamlit's own widget chrome stays light-based; the dashboard's light/dark
 # switch is driven by dashboard/ui/theme.py, which emits the active palette as

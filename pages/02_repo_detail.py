@@ -8,6 +8,7 @@ from dashboard.lib.config import get_config, get_feature_flags
 from dashboard.data import load_scored_history, load_scored_snapshot
 from dashboard.lib.linking import github_issue_url, github_pr_compare_url
 from dashboard.lib.remediation import get_remediation
+from dashboard.lib.schema import humanize_check
 from dashboard.lib.scorecard import fetch_scorecard_result
 from dashboard.lib.share import base_url, share_link
 from dashboard.ui import page_init, grade_pill, share_link_block, status_chip
@@ -129,12 +130,24 @@ def _render_check_expander(check: str, repo_row: pd.Series, selected_repo: str, 
     bucket = _classify(value)
     label_chip = status_chip(bucket, bucket.upper())
     short_desc = descriptions.get(check, {}).get("description", "No description available.")
-    header_label = f"{check}"
+    # Status and a readable title in the *collapsed* header: previously every row
+    # showed only the raw column name, so learning a check's state meant opening
+    # it. A styled chip cannot go here (expander labels take limited markdown), so
+    # the state is a text marker, which also keeps colour from being the only signal.
+    marker = {"pass": "PASS", "fail": "FAIL"}.get(bucket, "—")
+    header_label = f"`{marker}`  {humanize_check(check, descriptions)}"
 
     with st.expander(header_label, expanded=False):
         st.markdown(label_chip, unsafe_allow_html=True)
-        st.caption(short_desc)
-        st.code(f"value = {value!r}", language="python")
+        st.caption(f"`{check}` · {short_desc}")
+        # A Python repr ("value = 'False'") leaked the implementation. Show the
+        # value plainly, and say so when absent rather than printing None/nan.
+        rendered = str(value).strip()
+        st.markdown(
+            f"**Value:** `{rendered}`"
+            if rendered and rendered.lower() != "nan"
+            else "**Value:** _not recorded_"
+        )
 
         remediation = get_remediation(check)
         if bucket == "fail" and remediation:
@@ -300,7 +313,7 @@ def render() -> None:
     with control_left:
         filter_choice = st.radio(
             "Filter",
-            options=["Failing only", "All", "Passing", "Unknown"],
+            options=["Failing", "Passing", "Unknown", "All"],
             horizontal=True,
             index=0,
             key="detail_filter",
@@ -317,7 +330,7 @@ def render() -> None:
     pr_cfg = get_config("pr_templates")
     whitelisted = set(pr_cfg.get("whitelist", []))
 
-    bucket_for_choice = {"Failing only": "fail", "Passing": "pass", "Unknown": "unknown"}.get(filter_choice)
+    bucket_for_choice = {"Failing": "fail", "Passing": "pass", "Unknown": "unknown"}.get(filter_choice)
     visible_checks = []
     for check in sorted(check_cols):
         if category_choice != "All":

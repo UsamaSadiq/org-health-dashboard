@@ -23,6 +23,15 @@ class FilterState:
     search: str
     include_archived: bool
     tier: str
+    # Sidebar slot reserved next to the filter controls, filled by
+    # report_result_count() once the caller knows how many rows survived.
+    count_slot: object | None = None
+
+    def report_result_count(self, shown: int, total: int) -> None:
+        """Write the post-filter count into the reserved sidebar slot."""
+        if self.count_slot is None:
+            return
+        self.count_slot.caption(f"Showing {shown} of {total} repositories")
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if df.empty:
@@ -108,6 +117,12 @@ def render_sidebar_filters(
             else "all"
         )
 
+        # Result count belongs directly under the controls that produce it, but
+        # it is not known until the caller applies the filters. Reserve the slot
+        # here and let report_result_count() fill it, rather than emitting the
+        # caption after every other sidebar widget as the page used to.
+        count_slot = st.empty()
+
         st.markdown("---")
         st.toggle(
             "Dark mode",
@@ -116,7 +131,12 @@ def render_sidebar_filters(
             help="Switches the dashboard to a dark palette.",
         )
 
-    return FilterState(search=search, include_archived=include_archived, tier=tier)
+    return FilterState(
+        search=search,
+        include_archived=include_archived,
+        tier=tier,
+        count_slot=count_slot,
+    )
 
 
 def hydrate_from_query_params() -> None:

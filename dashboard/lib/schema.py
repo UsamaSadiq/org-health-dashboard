@@ -81,3 +81,29 @@ def validate_config_data(config_name: str, payload: dict, strict: bool = False) 
 		if strict:
 			raise
 		return False
+
+def humanize_check(check: str, descriptions: dict | None = None) -> str:
+	"""Human-readable label for a raw check column name.
+
+	Prefers a configured title, then falls back to tidying the column name. The
+	fallback matters because 63 of 76 checks have no description entry yet, so most
+	labels come from here.
+
+	Two upstream artefacts are handled. ``exists..coveragerc`` carries a double dot
+	because the prefix is ``exists.`` and the filename itself begins with a dot, and
+	it was rendered verbatim in the catalog and on Repo Detail. Remaining dots become
+	separators, so ``dependabot.has_ecosystem.npm`` reads as
+	``dependabot / has ecosystem / npm``.
+	"""
+	configured = (descriptions or {}).get(check, {})
+	title = str(configured.get("title") or "").strip()
+	if title:
+		return title
+
+	if check.startswith("exists."):
+		remainder = check[len("exists.") :]
+		# A leading dot here is the real filename (.coveragerc, .gitignore), not a
+		# separator, so it is preserved rather than collapsed.
+		return remainder or check
+
+	return check.replace("_", " ").replace(".", " / ")

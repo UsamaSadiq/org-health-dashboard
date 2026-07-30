@@ -139,10 +139,13 @@ def render() -> None:
 
     # ------------------------------------------------------------------ header
     st.title("Open edX Repository Health")
-    st.caption(
-        f"Snapshot {snapshot_date.isoformat() if snapshot_date else 'unknown'} · "
-        "drill in via the sidebar nav."
-    )
+    # The snapshot date already appears under the gauge, and "drill in via the
+    # sidebar nav" told the reader nothing they could not see. Use the configured
+    # tagline instead, which was defined in org_branding.yaml and never rendered.
+    branding = load_config("org_branding")
+    tagline = str(branding.get("tagline") or "").strip()
+    if tagline:
+        st.caption(tagline)
 
     filters = render_sidebar_filters(
         snapshot_date=snapshot_date,
@@ -151,10 +154,7 @@ def render() -> None:
         tier_counts=tier_counts(df),
     )
     working = filters.apply(df)
-
-    # Post-filter counter in the sidebar.
-    with st.sidebar:
-        st.caption(f"Showing {len(working)} of {len(df)} repos")
+    filters.report_result_count(len(working), len(df))
 
     if working.empty:
         st.warning("No repositories match the current filters.")
@@ -292,7 +292,7 @@ def render() -> None:
                     hide_index=True,
                     column_config=mover_config,
                 )
-        st.caption(f"Composite score change · {span_label}")
+        st.caption(f"Composite score change · {span_label} (UTC)")
 
     # ---------------------------------------- 4. full table (collapsed default)
     with st.expander(f"Full table — {len(ranked)} repos", expanded=False):

@@ -4,7 +4,11 @@ import streamlit as st
 
 from dashboard.lib.config import get_feature_flags
 
-st.set_page_config(page_title="Open edX Repo Health", layout="wide")
+st.set_page_config(
+    page_title="Open edX Repo Health",
+    page_icon=":material/health_and_safety:",
+    layout="wide",
+)
 
 # Styling and query-param hydration deliberately live in each page's page_init()
 # rather than here. Streamlit serves any file in pages/ by its filename-derived
