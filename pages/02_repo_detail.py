@@ -5,11 +5,10 @@ import streamlit as st
 from rapidfuzz import fuzz
 
 from dashboard.lib.config import get_config, get_feature_flags
-from dashboard.data import load_history, load_snapshot
+from dashboard.data import load_scored_history, load_scored_snapshot
 from dashboard.lib.linking import github_issue_url, github_pr_compare_url
 from dashboard.lib.remediation import get_remediation
 from dashboard.lib.scorecard import fetch_scorecard_result
-from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.share import base_url, share_link
 from dashboard.ui import page_init, grade_pill, share_link_block, status_chip
 from dashboard.ui.charts import metric_score_bar, sparkline
@@ -64,11 +63,17 @@ def _category_stats(row: pd.Series, category_cols: list[str]) -> tuple[int, int,
     return pass_count, fail_count, na_count
 
 
-@st.cache_data(ttl=600, show_spinner=False)
 def _history_for_repo(repo: str) -> list[dict]:
+    """Per-snapshot rows for one repository.
+
+    Deliberately not cached per repo: the underlying history is already cached by
+    load_scored_history, and a per-repo layer meant browsing 20 repositories held
+    20 slices of the same 30-day window (backlog H6). Filtering a cached frame is
+    cheap; storing it 20 times is not.
+    """
     try:
-        history = load_history(days=30)
-    except Exception:
+        history = load_scored_history(days=30)
+    except Exception:  # noqa: BLE001 - absent history is normal
         return []
     out = []
     for snapshot in history:
@@ -167,7 +172,7 @@ def render() -> None:
     st.title("Repository Detail")
 
     feature_flags = get_feature_flags()
-    df = calculate_scores(load_snapshot())
+    df = load_scored_snapshot()
     if df.empty:
         st.error("No data available.")
         return

@@ -5,12 +5,11 @@ from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 
-from dashboard.data import export_json_payload, load_config, load_snapshot
-from dashboard.lib.scoring import calculate_scores
+from dashboard.data import export_json_payload, load_config, load_scored_snapshot
 from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
 from dashboard.lib.share import share_link
 from dashboard.lib.tiers import tier_counts
-from dashboard.data import load_history
+from dashboard.data import load_scored_history
 from dashboard.ui import (
     page_init,
     card,
@@ -70,12 +69,12 @@ def _top_failing(frame: pd.DataFrame, limit: int = 10) -> pd.DataFrame:
 def _baseline_frame() -> pd.DataFrame | None:
     """Return the earliest snapshot in the last 7 days, scored, for KPI deltas."""
     try:
-        history = load_history(days=7)
+        history = load_scored_history(days=7)
     except Exception:
         return None
     if len(history) < 2:
         return None
-    return calculate_scores(history[0].df)
+    return history[0].df
 
 
 def _history_span() -> tuple[object, object] | None:
@@ -87,7 +86,7 @@ def _history_span() -> tuple[object, object] | None:
     snapshot. Callers label with the real span instead.
     """
     try:
-        history = load_history(days=30)
+        history = load_scored_history(days=30)
     except Exception:
         return None
     if len(history) < 2:
@@ -97,13 +96,13 @@ def _history_span() -> tuple[object, object] | None:
 
 def _top_movers(frame: pd.DataFrame) -> pd.DataFrame:
     try:
-        history = load_history(days=30)
+        history = load_scored_history(days=30)
     except Exception:
         return pd.DataFrame()
     if len(history) < 2:
         return pd.DataFrame()
 
-    baseline = calculate_scores(history[0].df)
+    baseline = history[0].df
     recent = frame[["repo_name", "score_composite"]]
     merged = recent.merge(
         baseline[["repo_name", "score_composite"]].rename(columns={"score_composite": "baseline_score"}),
@@ -118,7 +117,7 @@ def _top_movers(frame: pd.DataFrame) -> pd.DataFrame:
 
 def render() -> None:
     page_init()
-    df = load_snapshot()
+    df = load_scored_snapshot()
     if df.empty:
         st.title("Open edX Repository Health Dashboard")
         render_empty_state(
@@ -130,7 +129,6 @@ def render() -> None:
             st.rerun()
         return
 
-    df = calculate_scores(df)
     snapshot_date = (
         parse_snapshot_date(df[TIMESTAMP_COL].iloc[0]) if TIMESTAMP_COL in df.columns else None
     )

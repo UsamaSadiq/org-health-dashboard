@@ -148,18 +148,28 @@ def _sparkline(values: list[float]) -> go.Figure | None:
 
 
 def _load_org_avg_history(days: int = 30) -> list[float]:
+    """Org-average composite per snapshot, for the trend sparkline.
+
+    Imports ``dashboard.data`` rather than ``dashboard.lib.trends``: the previous
+    version called the library function directly, bypassing the Streamlit cache
+    entirely, so it re-fetched *and* re-scored the whole window on every rerun —
+    a third history load on a page that already made two. The scored frames are
+    now shared with Overview's baseline and movers.
+
+    Imported inside the function to avoid a circular import at module load
+    (``dashboard.data`` reaches back into the UI layer for spinners).
+    """
     try:
-        from dashboard.lib.scoring import calculate_scores
-        from dashboard.lib.trends import load_history
-        snaps = load_history(days=days)
-    except Exception:
+        from dashboard.data import load_scored_history
+
+        snaps = load_scored_history(days=days)
+    except Exception:  # noqa: BLE001 - no history is a normal state, not an error
         return []
     out: list[float] = []
     for snap in snaps[-days:]:
         try:
-            scored = calculate_scores(snap.df)
-            out.append(float(scored["score_composite"].mean()))
-        except Exception:
+            out.append(float(snap.df["score_composite"].mean()))
+        except Exception:  # noqa: BLE001 - skip a malformed snapshot, keep the rest
             continue
     return out
 
