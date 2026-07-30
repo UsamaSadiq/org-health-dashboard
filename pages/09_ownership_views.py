@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from dashboard.lib.config import get_feature_flags
-from dashboard.data import load_my_repos, load_snapshot
+from dashboard.data import load_my_repos, load_scored_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.share import share_link
 from dashboard.ui import page_init, share_link_block
@@ -71,7 +71,7 @@ def render() -> None:
         st.info("Maintainer views are disabled by feature flag.")
         return
 
-    df = calculate_scores(load_snapshot())
+    df = load_scored_snapshot()
     if df.empty:
         st.error("No data available.")
         return

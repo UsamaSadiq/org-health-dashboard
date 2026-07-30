@@ -5,8 +5,7 @@ from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 
-from dashboard.data import load_config, load_snapshot
-from dashboard.lib.scoring import calculate_scores
+from dashboard.data import load_config, load_scored_snapshot
 from dashboard.lib.schema import parse_last_push_utc
 from dashboard.lib.share import share_link
 from dashboard.lib.tiers import TIER_COL, repo_tier
@@ -17,7 +16,7 @@ def render() -> None:
     page_init()
     st.title("Repos Needing Attention")
 
-    df = calculate_scores(load_snapshot())
+    df = load_scored_snapshot()
     if df.empty:
         st.error("No data available.")
         return

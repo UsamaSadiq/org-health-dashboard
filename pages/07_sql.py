@@ -3,8 +3,7 @@ from __future__ import annotations
 import duckdb
 import streamlit as st
 
-from dashboard.data import load_snapshot
-from dashboard.lib.scoring import calculate_scores
+from dashboard.data import load_scored_snapshot
 from dashboard.lib.sql import UnsafeQueryError, sanitize_readonly_query
 from dashboard.ui import page_init, require_feature
 
@@ -22,7 +21,7 @@ def render() -> None:
     st.title("Ad-hoc SQL")
     st.caption("Phase 2 feature. Read-only SQL over current snapshot with row caps.")
 
-    df = calculate_scores(load_snapshot())
+    df = load_scored_snapshot()
     if df.empty:
         st.error("No snapshot available.")
         return

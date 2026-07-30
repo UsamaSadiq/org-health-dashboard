@@ -7,7 +7,7 @@ import streamlit as st
 from dashboard.lib.bulletin import generate_weekly_bulletin
 from dashboard.lib.config import get_feature_flags
 from dashboard.lib.share import base_url, share_link
-from dashboard.data import load_history
+from dashboard.data import load_scored_history
 from dashboard.lib.trends import summarize_weekly_changes
 from dashboard.ui import page_init, share_link_block
 
@@ -17,7 +17,7 @@ def render() -> None:
     st.title("What Changed")
 
     try:
-        history = load_history(days=30)
+        history = load_scored_history(days=30)
     except Exception as exc:  # noqa: BLE001
         st.error(f"Unable to load history: {exc}")
         return
