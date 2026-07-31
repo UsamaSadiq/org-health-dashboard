@@ -1,19 +1,24 @@
 name: UX audit
 
-# Two gates that unit tests cannot cover:
+# One gate that unit tests cannot cover: axe-core against every page at desktop
+# and mobile. It blocks on the violations we own; Streamlit's own DOM defects are
+# allowlisted per-rule in scripts/uxaudit/a11y.py.
 #
-#   a11y  - axe-core against every page at desktop and mobile. Blocks on the
-#           violations we own; Streamlit's own DOM defects are allowlisted
-#           per-rule in scripts/uxaudit/a11y.py.
-#   diff  - pixel comparison against the reference PNGs in tests/baseline/.
-#           Catches clipped labels, colliding text and layout shifts, none of
-#           which a unit test sees.
+# The visual diff is deliberately NOT run here, and that is a correctness point
+# rather than a convenience one. The baselines in tests/baseline/ are rendered
+# from whatever data the machine capturing them happened to have, and the two
+# environments do not agree:
 #
-# The diff job is advisory (continue-on-error) rather than blocking, because the
-# baselines are captured against the live upstream wg-maintenance CSV: a data
-# change upstream moves them without any code change here. Read the diff report,
-# then either fix the regression or re-record deliberately. The a11y job has no
-# such dependency and is strict.
+#   * The trend features (KPI deltas, the org sparkline, the movers tables, the
+#     What Changed comparison) exist only when an accumulated history file is
+#     available. That file 404s upstream, so it is present only where a stale
+#     copy is cached locally and absent on every clean checkout, including CI.
+#   * The snapshot itself is fetched live, so upstream data movement changes the
+#     rendering with no code change here.
+#
+# A gate that cannot pass teaches people to ignore gates, so `--mode diff` stays
+# a local pre-PR tool (see docs/RUNBOOK.md) until the harness can render against
+# a frozen fixture. Recorded in docs/UX_REVIEW_BACKLOG.md.
 
 on:
   pull_request:
@@ -56,26 +61,19 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - name: Run axe-core over every page
         run: python scripts/ux_audit.py --mode a11y
-
-  visual-diff:
-    name: Visual diff (advisory)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-      - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: python -m playwright install --with-deps chromium
-      - name: Compare against committed baselines
-        run: python scripts/ux_audit.py --mode diff
-      - name: Upload diff images
-        if: always()
+      - name: Capture the pages on failure
+        if: failure()
+        # A screenshot of whatever the runner actually rendered is the fastest
+        # diagnosis when the readiness guard fires; continue-on-error because a
+        # capture that also fails must not mask the original failure.
+        continue-on-error: true
+        run: python scripts/ux_audit.py --mode screenshots --out ci-screenshots
+      - name: Upload failure screenshots
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: ux-diff
-          path: .ux-audit/
+          name: ux-failure-screenshots
+          path: ci-screenshots/
           retention-days: 7
           if-no-files-found: ignore
+

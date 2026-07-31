@@ -212,12 +212,57 @@ def running_app(port: int | None = None, *, timeout: float = 60.0) -> Iterator[s
                 )
             time.sleep(_POLL_INTERVAL)
 
-        yield base_url
+        try:
+            yield base_url
+        except BaseException:
+            # The server log is the only record of a server-side crash, and the
+            # finally below deletes it. Without this, a mid-run death surfaced
+            # only as playwright's ERR_CONNECTION_REFUSED with no explanation.
+            _report_server_state(process, log_path, reason="the audit raised")
+            raise
+        else:
+            # A clean-looking run can still have lost the server: whatever page
+            # was in flight when it died may have been captured as a blank or
+            # error page rather than raising.
+            if process.poll() is not None:
+                _report_server_state(
+                    process, log_path, reason="the server exited during the run"
+                )
     finally:
         if process is not None:
             _kill(process)
         log_file.close()
         log_path.unlink(missing_ok=True)
+
+
+def _report_server_state(
+    process: subprocess.Popen[bytes] | None,
+    log_path: Path,
+    *,
+    reason: str,
+) -> None:
+    """Print the server's exit status and log tail to stderr.
+
+    Deliberately printed rather than raised: the original exception is the useful
+    one to propagate, and replacing it with a log dump would hide the failing
+    page. Goes to stderr so it interleaves correctly with a CI step's output.
+    """
+    alive = process is not None and process.poll() is None
+    status = "still running" if alive else f"exited with code {getattr(process, 'returncode', '?')}"
+    print(
+        f"\n--- ux-audit: {reason}; streamlit {status} ---\n"
+        f"{_log_tail(log_path)}\n"
+        f"--- end streamlit log ---",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+def _log_tail(path: Path, lines: int = 60) -> str:
+    """Last `lines` lines of the spooled log, or a note if it is unreadable."""
+    text = _read_log(path)
+    tail = text.splitlines()[-lines:]
+    return "\n".join(tail) if tail else "(empty)"
 
 
 def _read_log(path: Path) -> str:
