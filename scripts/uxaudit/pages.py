@@ -118,6 +118,10 @@ def resolve_pages(names: list[str] | None) -> list[PageSpec]:
 # Coordinates are (x0, y0, x1, y1) in captured-image pixels. They are inherently
 # brittle against layout change, which is why the better long-term fix is to have
 # capture.py tag volatile elements in the DOM and resolve boxes from there.
+# Note that these regions are only occupied when an accumulated history file is
+# available: without one, What Changed renders its "not enough history" empty
+# state and the masks fall on blank page, which is harmless. They matter again as
+# soon as the upstream history file is published.
 MASKS: dict[str, list[tuple[int, int, int, int]]] = {
     # "Generated: YYYY-MM-DD HH:MM UTC" inside the rendered bulletin.
     "desktop/what_changed.png": [(380, 630, 900, 665)],

@@ -41,6 +41,7 @@ satisfied by a partially-applied stylesheet.
 """
 from __future__ import annotations
 
+import os
 import time
 
 from playwright.sync_api import Error as PlaywrightError
@@ -56,15 +57,18 @@ _MARKER_JS = """
 """
 
 # How long to keep polling for the marker once a page's own settle budget has
-# already elapsed. Generous, because a cold server's first paint includes a
-# full CSV fetch and a 171-repo scoring pass.
-DEFAULT_TIMEOUT_SECONDS = 25.0
+# already elapsed. Sized for the slowest environment rather than the fastest: a
+# cold two-core CI runner pays for a network fetch, a pandas parse and a
+# 171-repo scoring pass before the first paint, and the cost of waiting too long
+# is a slow gate while the cost of waiting too little is a red one.
+# UX_AUDIT_READY_TIMEOUT overrides it without a code change.
+DEFAULT_TIMEOUT_SECONDS = float(os.environ.get("UX_AUDIT_READY_TIMEOUT", "75"))
 
 _POLL_INTERVAL_SECONDS = 0.5
 
 # Session warm-up needs the root page to have committed its style block, not to
 # be fully painted, so it can be shorter than a capture settle.
-_SESSION_TIMEOUT_SECONDS = 40.0
+_SESSION_TIMEOUT_SECONDS = float(os.environ.get("UX_AUDIT_SESSION_TIMEOUT", "90"))
 
 
 class UnstyledPageError(RuntimeError):
@@ -111,14 +115,64 @@ def wait_for_base_style(
 
     raise UnstyledPageError(
         f"{context}: the dashboard's base stylesheet ({READINESS_MARKER}) never "
-        f"appeared after {timeout:.0f}s of polling.\n"
-        "This is backlog item A0: a direct load of a non-root URL is served by "
-        "Streamlit's automatic pages/ discovery, which bypasses streamlit_app.py "
-        "and therefore apply_base_style(). Capturing or scanning now would record "
-        "an unstyled render that no user reaching the app via / would ever see.\n"
-        "Fix the app (WP-2A), or if this is unexpected, check that establish_session() "
-        "ran for this browser context."
+        f"appeared after {timeout:.0f}s of polling.\n\n"
+        f"{describe_page(page)}\n\n"
+        "Most likely causes, in the order worth checking:\n"
+        "  1. The page raised. A Streamlit exception page carries no custom CSS, so "
+        "     this guard fires on an app error rather than a styling problem — the "
+        "     diagnostics above will show the traceback text if so.\n"
+        "  2. The render did not finish inside the budget. Slow CI runners and a "
+        "     cold upstream fetch can outlast it; raise the page's settle_seconds.\n"
+        "  3. Backlog item A0 has regressed: a direct load of a non-root URL is "
+        "     served by Streamlit's automatic pages/ discovery, which bypasses "
+        "     streamlit_app.py and therefore apply_base_style().\n"
+        "Capturing or scanning now would record a render no real user sees, which is "
+        "why this is fatal rather than a warning."
     )
+
+
+def describe_page(page: Page) -> str:
+    """Best-effort snapshot of what the page actually contains.
+
+    Called only on failure. Without this the guard reported that the stylesheet
+    was missing and nothing about why, which turned a CI failure into a guessing
+    exercise — the app raising and the app being slow look identical from the
+    outside.
+    """
+    try:
+        facts = page.evaluate(
+            """() => {
+                const text = (document.body && document.body.innerText) || '';
+                const err = document.querySelector(
+                    '[data-testid="stException"], [data-testid="stAlertContainer"]'
+                );
+                return {
+                    url: location.href,
+                    title: document.title,
+                    styleTags: document.querySelectorAll('style').length,
+                    stylesWithVars: [...document.querySelectorAll('style')]
+                        .filter((s) => (s.textContent || '').includes('--color-')).length,
+                    hasStreamlitApp: !!document.querySelector('.stApp'),
+                    exceptionText: err ? (err.innerText || '').slice(0, 400) : '',
+                    bodyExcerpt: text.replace(/\\s+/g, ' ').slice(0, 400),
+                };
+            }"""
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostics must never mask the real error
+        return f"  (could not inspect the page: {type(exc).__name__}: {exc})"
+
+    lines = [
+        "  Page state at failure:",
+        f"    url            : {facts.get('url')}",
+        f"    title          : {facts.get('title')!r}",
+        f"    <style> tags   : {facts.get('styleTags')} "
+        f"({facts.get('stylesWithVars')} containing --color-*)",
+        f"    .stApp present : {facts.get('hasStreamlitApp')}",
+    ]
+    if facts.get("exceptionText"):
+        lines.append(f"    ERROR ON PAGE  : {facts['exceptionText']}")
+    lines.append(f"    body excerpt   : {facts.get('bodyExcerpt')!r}")
+    return "\n".join(lines)
 
 
 def establish_session(page: Page, base_url: str) -> None:

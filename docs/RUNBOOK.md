@@ -73,6 +73,37 @@ those regions with no code change behind them. Expect that noise, confirm it is
 confined to the date and the freshness chip, and move on. It is not a
 regression, and it is not worth chasing.
 
+The bulletin's "Generated:" timestamp moves every minute, which would fail the
+gate on every single run, so it is masked. Masks are declared in
+[scripts/uxaudit/pages.py](../scripts/uxaudit/pages.py) and kept deliberately
+narrow: a mask hides real regressions inside it.
+
+### The diff runs locally, not in CI
+
+`--mode diff` is a pre-PR tool, and the CI workflow deliberately does not run it.
+The baselines record whatever data the capturing machine had, and two things make
+that non-reproducible:
+
+1. The trend features (KPI deltas, the org sparkline, the movers tables, the What
+   Changed comparison) render only when an accumulated history file is available.
+   That file currently 404s upstream, so it exists only where a stale copy sits in
+   a local `.cache/`, and is absent on every clean checkout.
+2. The snapshot is fetched live, so upstream data movement changes the rendering
+   with no code change here.
+
+This was found the hard way: baselines captured with a two-month-old local
+`history.csv` failed CI immediately, because the runner had no history and so
+rendered none of those features. A gate that cannot pass teaches people to ignore
+gates.
+
+So: run `--mode diff` yourself before opening a PR, and read the report. The real
+fix is to render against a frozen data fixture, at which point the gate becomes
+reproducible and can be strict in CI. Tracked as H9 in
+[docs/UX_REVIEW_BACKLOG.md](./UX_REVIEW_BACKLOG.md).
+
+If you regenerate baselines, do it from a checkout with no `.cache/` directory,
+so what you commit is what a clean environment renders.
+
 ### After a Streamlit upgrade
 
 Run `--mode diff` immediately and expect sidebar and chart styling breakage.
