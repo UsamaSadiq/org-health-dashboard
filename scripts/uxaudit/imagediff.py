@@ -77,6 +77,7 @@ to flag. Region masking will be needed; it is deliberately not solved here.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -265,14 +266,33 @@ def _default_key(path: Path) -> str:
     return f"{parent}/{path.name}" if parent else path.name
 
 
+def _apply_masks(mask, regions: Sequence[tuple[int, int, int, int]]) -> None:
+    """Zero the masked rectangles in place, clipped to the image bounds."""
+    height, width = mask.shape[:2]
+    for x0, y0, x1, y1 in regions:
+        left, right = max(0, min(x0, x1)), min(width, max(x0, x1))
+        top, bottom = max(0, min(y0, y1)), min(height, max(y0, y1))
+        if right > left and bottom > top:
+            mask[top:bottom, left:right] = False
+
+
 def compare(baseline: Path, candidate: Path, out_path: Path, *,
-            tolerance: float) -> DiffResult:
+            tolerance: float,
+            masks: Sequence[tuple[int, int, int, int]] = ()) -> DiffResult:
     """Compare one candidate screenshot against its baseline.
 
     `tolerance` is the ceiling on the *global* changed fraction; the per-tile
     ceiling is the module-level TILE_TOLERANCE. A result fails if either is
     exceeded, or if the widths differ. A diff image is written to `out_path`
     only when there is something to look at.
+
+    `masks` are (x0, y0, x1, y1) rectangles excluded from comparison, for regions
+    that change with wall-clock time rather than with code. Without them the
+    bulletin's "Generated: <timestamp>" line failed the gate on every single run,
+    and a gate that is always red is a gate nobody reads. Masked pixels are
+    zeroed *before* both reductions, so they cannot inflate either number, and
+    they are outlined in the diff image so a reviewer can see what was skipped —
+    an unlabelled blank region is how a masked-away real regression happens.
     """
     key = _default_key(candidate)
 
@@ -332,6 +352,8 @@ def compare(baseline: Path, candidate: Path, out_path: Path, *,
         )
 
     mask = _changed_mask(base[:common_h], cand[:common_h])
+    if masks:
+        _apply_masks(mask, masks)
     changed = int(mask.sum())
     total = mask.size
     changed_ratio = changed / total
@@ -367,13 +389,17 @@ def compare(baseline: Path, candidate: Path, out_path: Path, *,
 
 
 def diff_tree(baseline_dir: Path, candidate_dir: Path, out_dir: Path, *,
-              tolerance: float) -> list[DiffResult]:
+              tolerance: float,
+              masks: Mapping[str, Sequence[tuple[int, int, int, int]]] | None = None) -> list[DiffResult]:
     """Compare every PNG under two `<viewport>/<page>.png` trees.
 
     The key set is the *union* of both trees, so a page present only in the
     candidates surfaces as "no baseline" and a page present only in the
     baselines surfaces as a missing-candidate failure. Keys are relative posix
     paths, so a report generated on macOS is byte-identical to one from CI.
+
+    `masks` maps a key to its excluded rectangles. The literal key `"*"` applies
+    to every image, for chrome that is volatile on all pages.
     """
     keys: set[str] = set()
     for root in (baseline_dir, candidate_dir):
@@ -382,11 +408,13 @@ def diff_tree(baseline_dir: Path, candidate_dir: Path, out_dir: Path, *,
 
     results: list[DiffResult] = []
     for key in sorted(keys):
+        per_key = list((masks or {}).get("*", ())) + list((masks or {}).get(key, ()))
         result = compare(
             baseline_dir / key,
             candidate_dir / key,
             out_dir / key,
             tolerance=tolerance,
+            masks=per_key,
         )
         # compare() only sees two loose paths, so it guesses a two-segment key.
         # Here we know the real one.

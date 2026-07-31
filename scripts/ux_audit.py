@@ -48,7 +48,7 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.uxaudit import a11y, imagediff  # noqa: E402
 from scripts.uxaudit.app import DEFAULT_PORT, running_app  # noqa: E402
 from scripts.uxaudit.capture import capture_all  # noqa: E402
-from scripts.uxaudit.pages import PAGES, VIEWPORTS, PageSpec, resolve_pages  # noqa: E402
+from scripts.uxaudit.pages import MASKS, PAGES, VIEWPORTS, PageSpec, resolve_pages  # noqa: E402
 
 BASELINE_DIR = REPO_ROOT / "tests" / "baseline"
 CURRENT_DIR = REPO_ROOT / ".ux-audit" / "current"
@@ -229,7 +229,9 @@ def _run_diff(
         capture_all(base_url, CURRENT_DIR, pages=pages, viewports=viewports)
 
     baseline_root = _scoped_baseline(_selected_keys(pages, viewports))
-    results = imagediff.diff_tree(baseline_root, CURRENT_DIR, diff_out, tolerance=tolerance)
+    results = imagediff.diff_tree(
+        baseline_root, CURRENT_DIR, diff_out, tolerance=tolerance, masks=MASKS
+    )
     print(imagediff.format_report(results))
     failed = [result for result in results if result.passed is False]
     return 1 if failed else 0

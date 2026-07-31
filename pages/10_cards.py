@@ -4,7 +4,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from dashboard.ui import page_init, require_feature
+from dashboard.ui import empty_state, page_init, require_feature
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,7 +38,11 @@ def render() -> None:
             mime="text/html",
         )
     else:
-        st.info("No year-in-review file found yet.")
+        empty_state(
+            "info",
+            "No year-in-review file generated yet.",
+            "Run the command above to produce one.",
+        )
 
     st.header("Embeddable repo cards")
     if EMBEDS_DIR.exists():
@@ -47,7 +51,11 @@ def render() -> None:
         for card in cards[:100]:
             st.write(card.relative_to(ROOT).as_posix())
     else:
-        st.info("No embed cards found yet.")
+        empty_state(
+            "info",
+            "No embeddable cards generated yet.",
+            "Run the command above to produce them.",
+        )
 
 
 render()

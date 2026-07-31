@@ -5,7 +5,7 @@ import streamlit as st
 
 from dashboard.data import load_scored_snapshot
 from dashboard.lib.sql import UnsafeQueryError, sanitize_readonly_query
-from dashboard.ui import page_init, require_feature
+from dashboard.ui import empty_state, page_init, repo_table, require_feature
 
 
 def render() -> None:
@@ -23,7 +23,11 @@ def render() -> None:
 
     df = load_scored_snapshot()
     if df.empty:
-        st.error("No snapshot available.")
+        empty_state(
+            "error",
+            "No snapshot available.",
+            "There is nothing to query.",
+        )
         return
 
     row_cap = st.slider("Maximum rows", min_value=20, max_value=2000, value=500, step=20)
@@ -36,7 +40,9 @@ def render() -> None:
             con.register("snapshot", df)
             sql = sanitize_readonly_query(query, row_limit=row_cap)
             result = con.execute(sql).fetch_df()
-            st.dataframe(result, width="stretch")
+            # Arbitrary query output: the shared vocabulary labels whichever
+            # known columns appear and leaves the rest under their own names.
+            repo_table(result, empty_message="Query returned no rows.")
         except UnsafeQueryError as exc:
             st.error(str(exc))
         except Exception as exc:  # noqa: BLE001

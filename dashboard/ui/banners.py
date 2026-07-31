@@ -1,25 +1,118 @@
+"""Banners, freshness reporting, and one empty-state vocabulary.
+
+There were six different ways to say "nothing here" across seven pages, and the
+colours contradicted each other: "no newly failing checks" rendered green while
+"no newly passing checks" rendered blue, and "nothing to show for the current
+filter" rendered green as though an empty filter result were good news.
+
+:func:`empty_state` fixes the vocabulary rather than the individual call sites.
+Its ``kind`` argument carries a single meaning each:
+
+``good``
+    Genuinely good news. Nothing failed, nothing regressed. Green.
+``info``
+    A neutral absence: no rows matched, a feature is switched off, nothing has
+    been generated yet. Blue. This is the default and the right choice whenever
+    "empty" is not itself an achievement.
+``warn``
+    Something about the data or configuration is wrong, and the reader may be
+    looking at less than they think.
+``error``
+    A hard failure. There is nothing to show and it is not the reader's doing.
+
+The second half of the fix is ``body``: an empty state that only says what is
+absent leaves the reader stuck. "Not enough historical snapshots" invites "why?
+for how long? is that expected?", so the body should answer at least one of those
+(backlog I3).
+"""
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from typing import Callable, Literal
 
 import streamlit as st
 
+EmptyStateKind = Literal["good", "info", "warn", "error"]
+
+# Fixed kind -> renderer mapping. Centralised so the semantics cannot drift back
+# apart one call site at a time.
+_RENDERERS: dict[str, Callable[[str], None]] = {
+    "good": st.success,
+    "info": st.info,
+    "warn": st.warning,
+    "error": st.error,
+}
+
+
+def empty_state(
+    kind: EmptyStateKind,
+    title: str,
+    body: str = "",
+    *,
+    action_label: str | None = None,
+    action_url: str | None = None,
+) -> None:
+    """Report an absent or empty result with consistent semantics.
+
+    Args:
+        kind: See the module docstring. Use ``good`` only when empty is an
+            achievement; ``info`` is the default for a neutral absence.
+        title: One line stating what is absent.
+        body: What the reader can do, or why it is absent. Strongly encouraged —
+            a bare statement of absence is the thing this replaces.
+        action_label: Optional link text, rendered after the message.
+        action_url: Target for ``action_label``.
+    """
+    # Resolve through the mapping in both cases, including the fallback: reaching
+    # for st.info directly would make _RENDERERS not quite the single source of
+    # truth it claims to be.
+    renderer = _RENDERERS.get(kind) or _RENDERERS["info"]
+    message = f"**{title}**" if body else title
+    if body:
+        message = f"{message}\n\n{body}"
+    renderer(message)
+    if action_label and action_url:
+        st.link_button(action_label, action_url)
+
 
 def render_freshness_banner(snapshot_date: date | None, stale_hours: int, critical_hours: int) -> None:
+    """Report snapshot age in the main content area.
+
+    This existed and was never called: the only freshness signal was a small
+    amber dot on a translucent chip partway down a dark sidebar, for data that
+    was three days past its own stale threshold (backlog C2, E10). A fresh
+    snapshot renders nothing at all — a banner on every page for the normal case
+    is noise, and the sidebar chip already carries it.
+    """
     if snapshot_date is None:
-        st.error("Snapshot timestamp unavailable.")
+        empty_state(
+            "error",
+            "Snapshot timestamp unavailable.",
+            "The dashboard cannot tell how old this data is.",
+        )
         return
 
     now = datetime.now(timezone.utc).date()
-    age_hours = (now - snapshot_date).days * 24
-    text = f"Snapshot date: {snapshot_date.isoformat()} (UTC)"
+    age_hours = max(0, (now - snapshot_date).days * 24)
+    # Bare duration, not _format_age()'s relative phrasing: that returns "7d ago",
+    # which reads as "Data is 7d ago old".
+    age = f"{age_hours}h" if age_hours < 48 else f"{age_hours // 24} days"
 
     if age_hours > critical_hours:
-        st.error(text + " | Data is stale - upstream pipeline may be down.")
+        empty_state(
+            "error",
+            f"This data is {age} old.",
+            f"Snapshot {snapshot_date.isoformat()} (UTC). The upstream pipeline may "
+            "have stopped; everything below describes the repositories as they were "
+            "at that point, not as they are now.",
+        )
     elif age_hours > stale_hours:
-        st.warning(text + " | Data may be stale.")
-    else:
-        st.info(text)
+        empty_state(
+            "warn",
+            f"This data is {age} old.",
+            f"Snapshot {snapshot_date.isoformat()} (UTC), past the "
+            f"{stale_hours}h freshness threshold. Recent changes will not appear yet.",
+        )
 
 
 def _format_age(age_hours: int) -> str:

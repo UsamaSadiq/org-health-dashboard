@@ -5,7 +5,7 @@ import streamlit as st
 from dashboard.lib.badge import markdown_badge
 from dashboard.data import load_snapshot
 from dashboard.lib.share import base_url
-from dashboard.ui import page_init, require_feature
+from dashboard.ui import empty_state, page_init, require_feature
 
 
 def render() -> None:
@@ -18,7 +18,7 @@ def render() -> None:
 
     df = load_snapshot()
     if df.empty:
-        st.error("No snapshot available.")
+        empty_state("error", "No snapshot available.", "No badge can be generated.")
         return
 
     repo = st.selectbox("Repository", sorted(df["repo_name"].astype(str).tolist()))

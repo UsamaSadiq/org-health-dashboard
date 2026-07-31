@@ -12,10 +12,12 @@ from dashboard.lib.tiers import tier_counts
 from dashboard.data import load_scored_history
 from dashboard.ui import (
     page_init,
+    render_freshness_banner,
     card,
     render_empty_state,
     render_repo_pill_list,
     render_sidebar_filters,
+    repo_table,
     share_link_block,
 )
 from dashboard.ui.charts import (
@@ -157,8 +159,17 @@ def render() -> None:
     filters.report_result_count(len(working), len(df))
 
     if working.empty:
-        st.warning("No repositories match the current filters.")
+        empty_state(
+            "info",
+            "No repositories match the current filters.",
+            "Clear the search box or widen the tier filter in the sidebar.",
+        )
         return
+
+    # Snapshot age, in the main content area. Until now the only signal was a
+    # small amber dot on a chip partway down a dark sidebar, for data three days
+    # past its own stale threshold (C2/E10). Renders nothing when fresh.
+    render_freshness_banner(snapshot_date, stale_hours, critical_hours)
 
     # A composite built half from default_when_missing needs saying out loud,
     # above the fold, not implying in a tile. See docs/UX_REVIEW_BACKLOG.md B1.
@@ -210,13 +221,22 @@ def render() -> None:
     with category_tab:
         category_df = _category_pass_rates(working)
         if category_df.empty:
-            st.info("No categorizable check columns in this snapshot.")
+            empty_state(
+                "warn",
+                "No categorisable check columns in this snapshot.",
+                "The upstream CSV may have changed shape; per-category rates cannot "
+                "be computed.",
+            )
         else:
             st.plotly_chart(category_pass_rate_bar(category_df), width="stretch")
     with failing_tab:
         fail_df = _top_failing(working)
         if fail_df.empty:
-            st.success("No failing checks in the current filter scope.")
+            empty_state(
+                "good",
+                "No failing checks in the current filter scope.",
+                "Every check passes for the repositories currently shown.",
+            )
         else:
             st.plotly_chart(top_failing_bar(fail_df), width="stretch")
             st.caption("Drill down on individual checks in **Failing Checks**.")
@@ -264,49 +284,33 @@ def render() -> None:
         # every repository improved.
         losers = movers[movers["delta"] < 0].nsmallest(5, "delta")
 
-        mover_config = {
-            "repo_name": st.column_config.TextColumn("Repository"),
-            "delta": st.column_config.NumberColumn("Change", format="%+.1f"),
-        }
-
         mv_left, mv_right = st.columns(2)
         with mv_left:
             st.markdown("**Biggest gainers**")
-            if gainers.empty:
-                st.caption("No repositories improved over this window.")
-            else:
-                st.dataframe(
-                    gainers[["repo_name", "delta"]],
-                    width="stretch",
-                    hide_index=True,
-                    column_config=mover_config,
-                )
+            repo_table(
+                gainers,
+                columns=["repo_name", "delta"],
+                empty_message="No repositories improved over this window.",
+            )
         with mv_right:
             st.markdown("**Biggest losers**")
-            if losers.empty:
-                st.caption("No repositories declined over this window.")
-            else:
-                st.dataframe(
-                    losers[["repo_name", "delta"]],
-                    width="stretch",
-                    hide_index=True,
-                    column_config=mover_config,
-                )
+            repo_table(
+                losers,
+                columns=["repo_name", "delta"],
+                empty_message="No repositories declined over this window.",
+            )
         st.caption(f"Composite score change · {span_label} (UTC)")
 
     # ---------------------------------------- 4. full table (collapsed default)
     with st.expander(f"Full table — {len(ranked)} repos", expanded=False):
-        table_with_links = ranked.copy()
-        table_with_links["repo_link"] = table_with_links["repo_name"].map(
-            lambda repo: share_link({"tab": "detail", "repo": str(repo)})
-        )
-        st.dataframe(
-            table_with_links,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "repo_link": st.column_config.LinkColumn("Open in Repo Detail"),
-            },
+        # Bounded height so the workhorse table stays navigable instead of
+        # running to several thousand pixels; the score bar makes the ranking
+        # readable at a glance (backlog D11).
+        repo_table(
+            ranked,
+            link_to_detail=True,
+            use_progress=True,
+            height=460,
         )
 
     # --------------------------------------------- 5. share + export footer
