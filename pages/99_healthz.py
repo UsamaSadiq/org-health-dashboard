@@ -7,6 +7,12 @@ import streamlit as st
 from dashboard.data import load_config, load_snapshot
 from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
 
+# Deliberately does NOT call page_init(): this is a machine-readable liveness
+# endpoint, not a page. It is intentionally reachable at /healthz even though it
+# is absent from st.navigation() — that is what makes it useful to a monitor —
+# and it emits plain key=value text, so the base stylesheet would only add
+# weight. tests/test_page_init.py exempts it explicitly.
+
 
 def render() -> None:
     df = load_snapshot()

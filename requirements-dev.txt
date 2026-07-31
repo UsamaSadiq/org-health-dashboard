@@ -1,0 +1,29 @@
+# Development and verification dependencies.
+#
+# Not installed on Streamlit Community Cloud; the deployed app only ever needs
+# requirements.txt. These are for running the test suite and the UX audit
+# harness (scripts/ux_audit.py) locally.
+#
+#   pip install -r requirements-dev.txt
+#
+# !! REQUIRED SECOND STEP !!
+# Playwright ships no browser with the wheel. After installing, download the
+# Chromium build the harness drives:
+#
+#   playwright install chromium
+#
+# Skipping this leaves every ux_audit.py mode failing at browser launch, which
+# looks like a harness bug and is not one.
+#
+# Pinned exactly, same as requirements.txt: the screenshot baselines in
+# tests/baseline/ are only comparable across machines if everyone renders and
+# diffs with the same versions.
+#
+# numpy and pillow already arrive transitively via streamlit/pandas, but
+# scripts/uxaudit/imagediff.py imports them directly, so they are declared here
+# too. Do not delete them as redundant; a transitive dependency is not a
+# contract.
+numpy==2.4.6         # pixel maths for the screenshot diff
+pillow==12.2.0       # scroll-and-stitch screenshot assembly, diff rendering
+playwright==1.60.0   # drives the harness; see "playwright install chromium" above
+pytest==9.0.3        # tests/ (8 modules); previously undeclared

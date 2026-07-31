@@ -7,38 +7,63 @@ import streamlit as st
 from dashboard.lib.bulletin import generate_weekly_bulletin
 from dashboard.lib.config import get_feature_flags
 from dashboard.lib.share import base_url, share_link
-from dashboard.data import load_history
+from dashboard.data import load_scored_history
 from dashboard.lib.trends import summarize_weekly_changes
-from dashboard.ui import share_link_block
+from dashboard.ui import empty_state, page_init, repo_table, share_link_block
 
 
 def render() -> None:
-    st.title("What Changed This Week")
+    page_init()
+    st.title("What Changed")
 
     try:
-        history = load_history(days=30)
+        history = load_scored_history(days=30)
     except Exception as exc:  # noqa: BLE001
-        st.error(f"Unable to load history: {exc}")
+        empty_state("error", "Unable to load snapshot history.", f"{exc}")
         return
     if len(history) < 2:
-        st.warning("Not enough historical snapshots to compute weekly deltas.")
+        empty_state(
+            "warn",
+            "Not enough history to compare.",
+            "At least two snapshots are needed. The accumulated history file is "
+            "published by the upstream pipeline; if this persists, that file is "
+            "missing or holds only one entry.",
+        )
         return
 
     latest = history[-1]
     baseline = history[-2]
     changes = summarize_weekly_changes(latest.df, baseline.df)
 
-    st.subheader("Newly failing checks")
-    if changes["new_failures"].empty:
-        st.success("No newly failing checks.")
-    else:
-        st.dataframe(changes["new_failures"], width="stretch")
+    # This compares the two most recent snapshots, which on the intended 6-hourly
+    # cadence is hours apart, not a week. The old title said "This Week" and the
+    # export still calls itself a weekly bulletin; state the real window rather
+    # than implying one. A period selector is WP-12 (backlog D41).
+    st.caption(
+        f"Comparing the two most recent snapshots: "
+        f"{baseline.timestamp.isoformat()} → {latest.timestamp.isoformat()} (UTC). "
+        f"{len(history)} snapshots available."
+    )
 
-    st.subheader("Newly passing checks")
-    if changes["new_passes"].empty:
-        st.info("No newly passing checks.")
+    st.header("Newly failing checks")
+    if changes["new_failures"].empty:
+        empty_state(
+            "good",
+            "No newly failing checks.",
+            "Nothing regressed between these two snapshots.",
+        )
     else:
-        st.dataframe(changes["new_passes"], width="stretch")
+        repo_table(changes["new_failures"], link_to_detail=True)
+
+    st.header("Newly passing checks")
+    if changes["new_passes"].empty:
+        empty_state(
+            "info",
+            "No newly passing checks.",
+            "Nothing was fixed between these two snapshots either.",
+        )
+    else:
+        repo_table(changes["new_passes"], link_to_detail=True)
 
     if get_feature_flags().get("enable_weekly_bulletin_export", True):
         commit_sha = os.getenv("GITHUB_SHA", "local")
@@ -48,14 +73,30 @@ def render() -> None:
             dashboard_url=base_url().rstrip("/"),
             commit_sha=commit_sha,
         )
-        st.subheader("Weekly bulletin export")
-        st.code(bulletin, language="markdown")
-        st.download_button(
-            "Download bulletin markdown",
-            data=bulletin.encode("utf-8"),
-            file_name="weekly-bulletin.md",
-            mime="text/markdown",
-        )
+        st.header("Bulletin")
+        # Rendered, not shown as highlighted source. st.code(..., "markdown")
+        # displayed the headings in red monospace, which read as an error rather
+        # than a report, and it produced two accessibility failures: the
+        # syntax-highlight tokens measured 2.4:1, and the resulting <pre>
+        # overflowed at 390px with no keyboard access (backlog D43, F13).
+        with st.container(border=True):
+            st.markdown(bulletin)
+        source_col, download_col = st.columns([3, 2])
+        with source_col:
+            with st.expander("Copy markdown source"):
+                st.text_area(
+                    "Bulletin markdown",
+                    value=bulletin,
+                    height=200,
+                    label_visibility="collapsed",
+                )
+        with download_col:
+            st.download_button(
+                "Download bulletin",
+                data=bulletin.encode("utf-8"),
+                file_name="weekly-bulletin.md",
+                mime="text/markdown",
+            )
 
     share_link_block(share_link({"tab": "what-changed"}), label="Copy link to this view")
 

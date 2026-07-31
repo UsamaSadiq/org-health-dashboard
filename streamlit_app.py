@@ -3,12 +3,20 @@ from __future__ import annotations
 import streamlit as st
 
 from dashboard.lib.config import get_feature_flags
-from dashboard.ui import apply_base_style, hydrate_from_query_params
 
-st.set_page_config(page_title="Open edX Repo Health", layout="wide")
-apply_base_style()
-hydrate_from_query_params()
+st.set_page_config(
+    page_title="Open edX Repo Health",
+    page_icon=":material/health_and_safety:",
+    layout="wide",
+)
 
+# Styling and query-param hydration deliberately live in each page's page_init()
+# rather than here. Streamlit serves any file in pages/ by its filename-derived
+# URL without this script's configuration taking effect, so anything applied
+# here is missing on a direct deep link. See dashboard/ui/page.py.
+#
+# For the same reason the flag checks below only shape the nav; each optional
+# page enforces its own flag via require_feature().
 flags = get_feature_flags()
 
 health_pages = [
@@ -20,6 +28,18 @@ health_pages = [
 ]
 
 ownership_pages = []
+# Backlog C4 asked for this section to be hidden when the snapshot carries no
+# ownership fields, on the grounds that an empty top-level section reads as a
+# broken product. Implemented and reverted: a page omitted from st.navigation()
+# stops resolving as a URL, so /ownership_views answered with a "Page not found"
+# modal and fell back to Overview. That breaks every previously shared link to
+# it, which is a worse outcome for a link recipient than an honest empty page —
+# and the cosmetic concern is addressable in the page's own empty state, which
+# is what WP-6 did instead.
+#
+# Genuinely hiding it would mean moving the file out of pages/ so Streamlit's
+# routing never sees it. That is a bigger change and needs a decision about
+# whether the URL should keep working; see docs/UX_REVIEW_BACKLOG.md C4.
 if flags.get("enable_maintainer_views", True):
     ownership_pages.append(
         st.Page("pages/09_ownership_views.py", title="Ownership", icon=":material/groups:")

@@ -4,10 +4,10 @@ import pandas as pd
 import streamlit as st
 
 from dashboard.lib.config import get_feature_flags
-from dashboard.data import load_my_repos, load_snapshot
+from dashboard.data import load_my_repos, load_scored_snapshot
 from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.share import share_link
-from dashboard.ui import share_link_block
+from dashboard.ui import empty_state, page_init, repo_table, share_link_block
 
 
 def _normalize_bucket(value: object) -> str:
@@ -64,15 +64,24 @@ def _group_summary(df: pd.DataFrame, column: str) -> pd.DataFrame:
 
 
 def render() -> None:
+    page_init()
     st.title("Maintainer and Working Group Views")
 
     if not get_feature_flags().get("enable_maintainer_views", True):
-        st.info("Maintainer views are disabled by feature flag.")
+        empty_state(
+            "info",
+            "Maintainer views are switched off for this deployment.",
+            "Enable `enable_maintainer_views` in `dashboard/config/feature_flags.yaml`.",
+        )
         return
 
-    df = calculate_scores(load_snapshot())
+    df = load_scored_snapshot()
     if df.empty:
-        st.error("No data available.")
+        empty_state(
+            "error",
+            "No snapshot available.",
+            "The upstream CSV and the local cache are both empty.",
+        )
         return
 
     coverage = _ownership_coverage(df)
@@ -84,8 +93,9 @@ def render() -> None:
     )
     if coverage < 20:
         st.warning(
-            "Ownership data coverage is below the PRD trigger threshold (20%). "
-            "Views remain available for early validation."
+            "Ownership data is not yet populated for most repositories, so these "
+            "views are mostly empty. To appear here, a repository needs "
+            "`spec.owner` set in its `catalog-info.yaml` (OEP-55)."
         )
 
     # By Owner is primary (catalog-info). Theme/Squad tabs only appear when the
@@ -104,25 +114,31 @@ def render() -> None:
 
     with tabs["By Owner"]:
         if owner_col is None:
-            st.info(
-                "No owner data found. Populate `catalog-info.yaml` `spec.owner` "
-                "in the repositories to enable this view."
+            empty_state(
+                "info",
+                "No owner data in this snapshot.",
+                "A repository appears here once its `catalog-info.yaml` sets "
+                "`spec.owner` (OEP-55). None currently do.",
             )
         else:
             owner_summary = _group_summary(df, owner_col)
-            st.dataframe(owner_summary, width="stretch")
+            repo_table(owner_summary, empty_message="No owners found.")
 
     if "By Theme" in tabs:
         with tabs["By Theme"]:
-            st.dataframe(_group_summary(df, "ownership.theme"), width="stretch")
+            repo_table(_group_summary(df, "ownership.theme"), empty_message="No themes found.")
 
     if "By Squad" in tabs:
         with tabs["By Squad"]:
-            st.dataframe(_group_summary(df, "ownership.squad"), width="stretch")
+            repo_table(_group_summary(df, "ownership.squad"), empty_message="No squads found.")
 
     with tabs["My Repos"]:
         if not get_feature_flags().get("enable_my_repos_filter", True):
-            st.info("My repos filter is disabled by feature flag.")
+            empty_state(
+                "info",
+                "This view is switched off for this deployment.",
+                "Enable `enable_my_repos_filter` in `dashboard/config/feature_flags.yaml`.",
+            )
         else:
             st.caption(
                 "Matches GitHub handle against repo owner from repo_name and ownership/maintainer fields when available."
@@ -131,11 +147,18 @@ def render() -> None:
             if handle.strip():
                 mine = calculate_scores(load_my_repos(handle.strip()))
                 if mine.empty:
-                    st.info("No repositories matched this handle in ownership fields.")
+                    empty_state(
+                        "info",
+                        "No repositories matched that handle.",
+                        "Ownership fields are largely unpopulated, so most repositories "
+                        "cannot be matched to anyone yet.",
+                    )
                 else:
-                    st.dataframe(
-                        mine[["repo_name", "score_composite", "score_letter"]].sort_values("score_composite", ascending=False),
-                        width="stretch",
+                    repo_table(
+                        mine.sort_values("score_composite", ascending=False),
+                        columns=["repo_name", "score_composite", "score_letter"],
+                        link_to_detail=True,
+                        use_progress=True,
                     )
 
     share_link_block(
