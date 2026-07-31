@@ -8,7 +8,7 @@ import streamlit as st
 from dashboard.data import load_config, load_snapshot
 from dashboard.lib.remediation import missing_remediation_checks
 from dashboard.lib.schema import humanize_check
-from dashboard.ui import page_init
+from dashboard.ui import empty_state, page_init
 
 PASS_TOKENS = {"true", "1", "yes"}
 FAIL_TOKENS = {"false", "0", "no", "fail", "failing"}
@@ -144,7 +144,11 @@ def render() -> None:
     check_columns = sorted([col for col in df.columns if _is_check_col(col)]) if not df.empty else []
 
     if not check_columns:
-        st.warning("No check columns detected in snapshot.")
+        empty_state(
+            "warn",
+            "No check columns detected in this snapshot.",
+            "The catalogue below still lists proposed checks.",
+        )
         _render_candidates()
         return
 

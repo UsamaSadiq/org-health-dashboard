@@ -11,7 +11,7 @@ from dashboard.lib.remediation import get_remediation
 from dashboard.lib.schema import humanize_check
 from dashboard.lib.scorecard import fetch_scorecard_result
 from dashboard.lib.share import base_url, share_link
-from dashboard.ui import page_init, grade_pill, share_link_block, status_chip
+from dashboard.ui import empty_state, page_init, grade_pill, repo_table, share_link_block, status_chip
 from dashboard.ui.charts import metric_score_bar, sparkline
 
 
@@ -187,7 +187,11 @@ def render() -> None:
     feature_flags = get_feature_flags()
     df = load_scored_snapshot()
     if df.empty:
-        st.error("No data available.")
+        empty_state(
+            "error",
+            "No snapshot available.",
+            "The upstream CSV and the local cache are both empty.",
+        )
         return
 
     repos = sorted(df["repo_name"].dropna().astype(str).tolist())
@@ -199,7 +203,11 @@ def render() -> None:
     selected = st.selectbox("Repository", options=options, index=0 if options else None, key="detail_selected")
 
     if not selected:
-        st.info("Pick a repository to see its detail.")
+        empty_state(
+            "info",
+            "Pick a repository to see its detail.",
+            "Type part of a name above, or arrive here from a link on Overview.",
+        )
         return
 
     repo_row = df[df["repo_name"] == selected].iloc[0]
@@ -282,7 +290,11 @@ def render() -> None:
                 scorecard = None
                 st.warning(f"Unable to fetch Scorecard data: {exc}")
             if scorecard is None:
-                st.info("No public OpenSSF Scorecard result found for this repository.")
+                empty_state(
+                    "info",
+                    "No public OpenSSF Scorecard result for this repository.",
+                    "Scorecard publishes results only for repositories it has scanned.",
+                )
             else:
                 m1, m2 = st.columns(2)
                 m1.metric("Scorecard score", f"{scorecard.score:.2f}" if scorecard.score is not None else "n/a")
@@ -291,7 +303,7 @@ def render() -> None:
                     checks_df = pd.DataFrame(
                         [{"check": item.name, "score": item.score, "reason": item.reason} for item in scorecard.checks]
                     )
-                    st.dataframe(checks_df.sort_values("check"), width="stretch", hide_index=True)
+                    repo_table(checks_df.sort_values("check"))
 
     # ----------------------------------------------------- category cards
     st.header("Category overview")
@@ -342,7 +354,11 @@ def render() -> None:
 
     st.caption(f"{len(visible_checks)} of {len(check_cols)} checks shown.")
     if not visible_checks:
-        st.success("Nothing to show for the current filter.")
+        empty_state(
+            "info",
+            "No checks match this filter.",
+            "Switch the filter to All, or pick a different category.",
+        )
         return
 
     for check in visible_checks:

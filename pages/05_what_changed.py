@@ -9,7 +9,7 @@ from dashboard.lib.config import get_feature_flags
 from dashboard.lib.share import base_url, share_link
 from dashboard.data import load_scored_history
 from dashboard.lib.trends import summarize_weekly_changes
-from dashboard.ui import page_init, share_link_block
+from dashboard.ui import empty_state, page_init, repo_table, share_link_block
 
 
 def render() -> None:
@@ -19,10 +19,16 @@ def render() -> None:
     try:
         history = load_scored_history(days=30)
     except Exception as exc:  # noqa: BLE001
-        st.error(f"Unable to load history: {exc}")
+        empty_state("error", "Unable to load snapshot history.", f"{exc}")
         return
     if len(history) < 2:
-        st.warning("Not enough historical snapshots to compute weekly deltas.")
+        empty_state(
+            "warn",
+            "Not enough history to compare.",
+            "At least two snapshots are needed. The accumulated history file is "
+            "published by the upstream pipeline; if this persists, that file is "
+            "missing or holds only one entry.",
+        )
         return
 
     latest = history[-1]
@@ -41,15 +47,23 @@ def render() -> None:
 
     st.header("Newly failing checks")
     if changes["new_failures"].empty:
-        st.success("No newly failing checks.")
+        empty_state(
+            "good",
+            "No newly failing checks.",
+            "Nothing regressed between these two snapshots.",
+        )
     else:
-        st.dataframe(changes["new_failures"], width="stretch")
+        repo_table(changes["new_failures"], link_to_detail=True)
 
     st.header("Newly passing checks")
     if changes["new_passes"].empty:
-        st.info("No newly passing checks.")
+        empty_state(
+            "info",
+            "No newly passing checks.",
+            "Nothing was fixed between these two snapshots either.",
+        )
     else:
-        st.dataframe(changes["new_passes"], width="stretch")
+        repo_table(changes["new_passes"], link_to_detail=True)
 
     if get_feature_flags().get("enable_weekly_bulletin_export", True):
         commit_sha = os.getenv("GITHUB_SHA", "local")

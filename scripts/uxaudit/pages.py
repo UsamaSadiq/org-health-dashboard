@@ -100,3 +100,26 @@ def resolve_pages(names: list[str] | None) -> list[PageSpec]:
         )
     wanted = set(names)
     return [page for page in PAGES if page.name in wanted]
+
+
+# Regions excluded from the visual diff, keyed by "<viewport>/<page>.png". The
+# literal "*" applies to every image.
+#
+# These are places the rendered output changes with wall-clock time rather than
+# with code, so they would fail the gate on every run. The bulletin is the clear
+# case: generate_weekly_bulletin() stamps "Generated: <timestamp>" at render
+# time, which moves every minute.
+#
+# Keep this list short and specific. A mask hides real regressions inside it, so
+# a whole-page or whole-column entry is almost always the wrong answer; the
+# alternative for anything larger is to make the underlying value injectable so
+# it can be pinned instead.
+#
+# Coordinates are (x0, y0, x1, y1) in captured-image pixels. They are inherently
+# brittle against layout change, which is why the better long-term fix is to have
+# capture.py tag volatile elements in the DOM and resolve boxes from there.
+MASKS: dict[str, list[tuple[int, int, int, int]]] = {
+    # "Generated: YYYY-MM-DD HH:MM UTC" inside the rendered bulletin.
+    "desktop/what_changed.png": [(380, 630, 900, 665)],
+    "mobile/what_changed.png": [(20, 700, 390, 760)],
+}
