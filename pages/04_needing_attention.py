@@ -5,27 +5,24 @@ from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 
-from dashboard.data import load_config, load_snapshot
-from dashboard.lib.scoring import calculate_scores
+from dashboard.data import load_config, load_scored_snapshot
 from dashboard.lib.schema import parse_last_push_utc
 from dashboard.lib.share import share_link
-from dashboard.ui import share_link_block
-
-
-def _repo_tier(repo: str, tiers: dict) -> str:
-    for tier in ["critical", "important", "standard"]:
-        for configured in tiers.get(tier, []):
-            if repo == configured or repo.endswith("/" + configured):
-                return tier
-    return "standard"
+from dashboard.lib.tiers import TIER_COL, repo_tier
+from dashboard.ui import empty_state, page_init, repo_table, share_link_block
 
 
 def render() -> None:
+    page_init()
     st.title("Repos Needing Attention")
 
-    df = calculate_scores(load_snapshot())
+    df = load_scored_snapshot()
     if df.empty:
-        st.error("No data available.")
+        empty_state(
+            "error",
+            "No snapshot available.",
+            "The upstream CSV and the local cache are both empty.",
+        )
         return
 
     rules = load_config("attention_rules").get("rules", {})
@@ -36,7 +33,7 @@ def render() -> None:
     rows = []
     for _, row in df.iterrows():
         repo = str(row.get("repo_name", ""))
-        tier = _repo_tier(repo, tiers_cfg)
+        tier = str(row.get(TIER_COL) or repo_tier(repo, tiers_cfg))
         if selected_tier != "all" and tier != selected_tier:
             continue
 
@@ -70,7 +67,7 @@ def render() -> None:
             rows.append(
                 {
                     "repo_name": repo,
-                    "tier": tier,
+                    TIER_COL: tier,
                     "score_composite": row.get("score_composite"),
                     "score_letter": row.get("score_letter"),
                     "reasons": "; ".join(reasons),
@@ -78,21 +75,18 @@ def render() -> None:
             )
 
     if not rows:
-        st.success("No repositories currently match the attention rules.")
+        empty_state(
+            "good",
+            "No repositories currently match the attention rules.",
+            "Nothing is flagged by the rules in `attention_rules.yaml` for this tier.",
+        )
         return
 
-    result = pd.DataFrame(rows).sort_values(["tier", "score_composite"], ascending=[True, True])
-    result = result.copy()
-    result["repo_link"] = result["repo_name"].map(
-        lambda repo: share_link({"tab": "detail", "repo": str(repo)})
-    )
-    st.dataframe(
+    result = pd.DataFrame(rows).sort_values([TIER_COL, "score_composite"], ascending=[True, True])
+    repo_table(
         result,
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "repo_link": st.column_config.LinkColumn("Open Detail"),
-        },
+        columns=["repo_name", "repo_tier", "score_composite", "score_letter", "reasons"],
+        link_to_detail=True,
     )
     share_link_block(
         share_link({"tab": "needing-attention", "tier": selected_tier}),

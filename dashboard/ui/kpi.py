@@ -7,29 +7,36 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard.lib.schema import LAST_PUSH_COL, parse_last_push_utc
-from dashboard.ui.theme import (
-    ACCENT,
-    BORDER,
-    FAIL,
-    GRADE_COLORS,
-    MUTED,
-    PASS,
-    PRIMARY,
-    SURFACE_ALT,
-    TEXT,
-    WARN,
-)
+from dashboard.ui.theme import palette
+
+
+def _tint(hex_color: str, alpha: float = 0.12) -> str:
+    """Translucent version of a grade colour, for the gauge's background bands."""
+    value = hex_color.lstrip("#")
+    r, g, b = (int(value[i : i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+
+# Streamlit hides the delta row entirely for None, which made a genuinely
+# unchanged tile look like a rendering fault next to tiles that had deltas.
+NO_CHANGE = "no change"
 
 
 def _delta_str(value: float | int | None) -> str | None:
+    """Format a KPI delta.
+
+    Returns None only when there is no baseline to compare against. An actual
+    zero (or a float rounding to zero) returns NO_CHANGE, so "unchanged" and
+    "unknown" are visually distinct.
+    """
     if value is None:
         return None
     if isinstance(value, float):
         if abs(value) < 0.05:
-            return None
+            return NO_CHANGE
         return f"{value:+.1f}"
     if value == 0:
-        return None
+        return NO_CHANGE
     return f"{value:+d}"
 
 
@@ -45,9 +52,17 @@ def _letter_from_score(score: float) -> str:
     return "F"
 
 
-def _gauge_figure(avg: float) -> go.Figure:
+def _gauge_figure(avg: float, measured_weight: float | None = None) -> go.Figure:
+    """Org-average gauge.
+
+    `measured_weight` (0..1) is the fraction of total metric weight genuinely
+    measured rather than filled from `default_when_missing`. When it is below 1
+    the gauge says so beneath the grade: presenting a confident composite
+    without that caveat was the single least defensible thing on the page.
+    """
+    p = palette()
     letter = _letter_from_score(avg)
-    color = GRADE_COLORS.get(letter, PRIMARY)
+    color = p.grade_colors.get(letter, p.primary)
 
     # mode="gauge" (no auto number) so the value and grade can be placed as
     # separate, non-overlapping annotations inside the arc.
@@ -56,38 +71,50 @@ def _gauge_figure(avg: float) -> go.Figure:
             mode="gauge",
             value=round(avg, 1),
             gauge={
-                "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": BORDER, "tickfont": {"color": MUTED}},
+                "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": p.border, "tickfont": {"color": p.muted}},
                 "bar": {"color": color, "thickness": 0.25},
                 "bgcolor": "rgba(0,0,0,0)",
                 "borderwidth": 0,
                 "steps": [
-                    {"range": [0, 20], "color": "rgba(185, 28, 28, 0.12)"},
-                    {"range": [20, 40], "color": "rgba(234, 88, 12, 0.12)"},
-                    {"range": [40, 60], "color": "rgba(217, 119, 6, 0.12)"},
-                    {"range": [60, 80], "color": "rgba(22, 163, 74, 0.12)"},
-                    {"range": [80, 100], "color": "rgba(21, 128, 61, 0.16)"},
+                    {"range": [0, 20], "color": _tint(p.grade_colors["F"])},
+                    {"range": [20, 40], "color": _tint(p.grade_colors["D"])},
+                    {"range": [40, 60], "color": _tint(p.grade_colors["C"])},
+                    {"range": [60, 80], "color": _tint(p.grade_colors["B"])},
+                    {"range": [80, 100], "color": _tint(p.grade_colors["A"], 0.16)},
                 ],
                 "threshold": {"line": {"color": color, "width": 3}, "thickness": 0.75, "value": avg},
             },
-            domain={"x": [0, 1], "y": [0.20, 1]},
+            domain={"x": [0, 1], "y": [0.24, 1]},
         )
     )
 
     # Value above, grade below — comfortably separated in the arc's bowl.
     fig.add_annotation(
-        x=0.5, y=0.30, xref="paper", yref="paper", showarrow=False,
-        text=f"<b style='font-size:42px;color:{TEXT};'>{avg:.1f}</b>",
+        x=0.5, y=0.34, xref="paper", yref="paper", showarrow=False,
+        text=f"<b style='font-size:42px;color:{p.text};'>{avg:.1f}</b>",
     )
     fig.add_annotation(
-        x=0.5, y=0.10, xref="paper", yref="paper", showarrow=False,
+        x=0.5, y=0.17, xref="paper", yref="paper", showarrow=False,
         text=f"<b style='font-size:22px;color:{color};'>Grade {letter}</b>",
     )
 
+    # The caveat belongs on the number, not in a tile three columns away. On the
+    # live snapshot this reads 50%, i.e. half the composite is
+    # default_when_missing rather than measurement.
+    if measured_weight is not None and measured_weight < 0.999:
+        fig.add_annotation(
+            x=0.5, y=0.02, xref="paper", yref="paper", showarrow=False,
+            text=(
+                f"<span style='font-size:12px;color:{p.warn};'>"
+                f"based on {measured_weight:.0%} of metric weight</span>"
+            ),
+        )
+
     fig.update_layout(
-        margin={"l": 12, "r": 12, "t": 12, "b": 12},
+        margin={"l": 28, "r": 28, "t": 12, "b": 12},
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        height=280,
+        height=300,
     )
     return fig
 
@@ -108,13 +135,14 @@ def _count_stale(df: pd.DataFrame, stale_hours: int) -> int:
 
 
 def _sparkline(values: list[float]) -> go.Figure | None:
+    p = palette()
     if not values or len(values) < 2:
         return None
     fig = go.Figure(
         go.Scatter(
             y=values,
             mode="lines",
-            line={"color": ACCENT, "width": 2},
+            line={"color": p.accent, "width": 2},
             hoverinfo="skip",
         )
     )
@@ -131,18 +159,28 @@ def _sparkline(values: list[float]) -> go.Figure | None:
 
 
 def _load_org_avg_history(days: int = 30) -> list[float]:
+    """Org-average composite per snapshot, for the trend sparkline.
+
+    Imports ``dashboard.data`` rather than ``dashboard.lib.trends``: the previous
+    version called the library function directly, bypassing the Streamlit cache
+    entirely, so it re-fetched *and* re-scored the whole window on every rerun —
+    a third history load on a page that already made two. The scored frames are
+    now shared with Overview's baseline and movers.
+
+    Imported inside the function to avoid a circular import at module load
+    (``dashboard.data`` reaches back into the UI layer for spinners).
+    """
     try:
-        from dashboard.lib.scoring import calculate_scores
-        from dashboard.lib.trends import load_history
-        snaps = load_history(days=days)
-    except Exception:
+        from dashboard.data import load_scored_history
+
+        snaps = load_scored_history(days=days)
+    except Exception:  # noqa: BLE001 - no history is a normal state, not an error
         return []
     out: list[float] = []
     for snap in snaps[-days:]:
         try:
-            scored = calculate_scores(snap.df)
-            out.append(float(scored["score_composite"].mean()))
-        except Exception:
+            out.append(float(snap.df["score_composite"].mean()))
+        except Exception:  # noqa: BLE001 - skip a malformed snapshot, keep the rest
             continue
     return out
 
@@ -163,6 +201,12 @@ def render_kpi_strip(
     grade_f = int((df["score_letter"] == "F").sum())
     stale = _count_stale(df, stale_hours)
     avg_coverage = float(df["score_coverage"].mean()) if "score_coverage" in df.columns and total else 0.0
+    # Fraction of weight actually measured (see dashboard/lib/scoring.py). Falls
+    # back to coverage for frames scored before WP-4 added the column.
+    if "score_measured_weight" in df.columns and total:
+        avg_measured = float(df["score_measured_weight"].mean())
+    else:
+        avg_measured = avg_coverage
 
     deltas: dict[str, str | None] = {
         "total": None, "avg": None, "a": None, "f": None, "stale": None,
@@ -189,12 +233,12 @@ def render_kpi_strip(
             unsafe_allow_html=True,
         )
         st.plotly_chart(
-            _gauge_figure(avg),
+            _gauge_figure(avg, measured_weight=avg_measured),
             width="stretch",
             config={"displayModeBar": False},
         )
         snap = snapshot_date.isoformat() if snapshot_date else "unknown"
-        st.caption(f"{total} repos · snapshot {snap}")
+        st.caption(f"{total} repositories · snapshot {snap} (UTC)")
 
     with tiles_col:
         history = _load_org_avg_history(30)
@@ -207,10 +251,12 @@ def render_kpi_strip(
         row1[1].metric("Grade F", grade_f, delta=deltas["f"], delta_color="inverse")
         row2[0].metric("Stale repos", stale, delta=deltas["stale"], delta_color="inverse")
         row2[1].metric(
-            "Score coverage",
-            f"{avg_coverage:.0%}",
-            help="Fraction of total metric weight computable from this snapshot. "
-                 "Metrics whose columns are absent from the snapshot are excluded.",
+            "Score measured",
+            f"{avg_measured:.0%}",
+            help="Fraction of total metric weight computed from real values. The "
+                 "remainder falls back to default_when_missing (50), so it moves "
+                 "no repository up or down relative to any other. "
+                 f"Columns present in the snapshot: {avg_coverage:.0%}.",
         )
 
         spark = _sparkline(history)

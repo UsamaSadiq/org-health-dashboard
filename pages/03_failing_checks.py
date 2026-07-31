@@ -1,21 +1,26 @@
 from __future__ import annotations
 
 import pandas as pd
-import plotly.express as px
 import streamlit as st
 
-from dashboard.data import load_snapshot
-from dashboard.lib.scoring import calculate_scores
+from dashboard.data import load_scored_snapshot
 from dashboard.lib.share import share_link
-from dashboard.ui import share_link_block
+from dashboard.ui import empty_state, page_init, repo_table, share_link_block
+from dashboard.ui.charts import top_failing_bar
 
 
 def render() -> None:
+    page_init()
     st.title("Failing Checks")
 
-    df = calculate_scores(load_snapshot())
+    df = load_scored_snapshot()
     if df.empty:
-        st.error("No data available.")
+        empty_state(
+            "error",
+            "No snapshot available.",
+            "The upstream CSV and the local cache are both empty. This usually "
+            "clears on its own within a few minutes.",
+        )
         return
 
     check_cols = [
@@ -24,7 +29,11 @@ def render() -> None:
         if "." in col and not col.startswith("github.") and not col.startswith("language_bytes.")
     ]
     if not check_cols:
-        st.warning("No check columns found in snapshot.")
+        empty_state(
+            "warn",
+            "No check columns found in this snapshot.",
+            "The upstream CSV may have changed shape.",
+        )
         return
 
     rows = []
@@ -35,49 +44,59 @@ def render() -> None:
             rows.append({"check": check, "fail_count": count})
 
     if not rows:
-        st.success("No failing checks detected.")
+        empty_state(
+            "good",
+            "No failing checks detected.",
+            "Every collected check passes across the whole organisation.",
+        )
         return
 
     fail_df = pd.DataFrame(rows).sort_values("fail_count", ascending=False)
 
-    st.subheader("Failing checks distribution")
-    fig = px.bar(
-        fail_df,
-        x="check",
-        y="fail_count",
-        color="check",
-        custom_data=["check"],
-        title="Failing checks by count",
-    )
+    st.header("Most-failed checks")
 
-    selection = st.plotly_chart(
-        fig,
+    # The themed lollipop chart, not a raw px.bar. The previous chart gave every
+    # one of ~40 checks its own colour, rotated the labels into an unreadable
+    # overlapping band, and emitted a legend that listed six series and then cut
+    # off (backlog E1, and the readable half of D26). Capped and disclosed rather
+    # than silently truncated.
+    TOP_N = 15
+    shown = fail_df.head(TOP_N).rename(columns={"fail_count": "failing"})
+    st.plotly_chart(
+        top_failing_bar(shown),
         width="stretch",
-        on_select="rerun",
-        selection_mode=["points"],
+        config={"displayModeBar": False},
     )
+    if len(fail_df) > TOP_N:
+        st.caption(
+            f"Showing the {TOP_N} most-failed of {len(fail_df)} failing checks. "
+            "Use the selector below to inspect any of them."
+        )
 
-    selected_check = None
-    if selection and isinstance(selection, dict):
-        selected = selection.get("selection", {}).get("points", [])
-        if selected:
-            selected_check = selected[0].get("customdata", [None])[0]
+    # An explicit selector alongside the chart. Click-to-filter was wired via
+    # on_select but nothing said so, and it needed a precise click on a 12px bar
+    # (D27). A selectbox is discoverable and keyboard-reachable; it also survives
+    # the chart being capped at TOP_N, which click-to-filter would not.
+    check_options = ["All repositories"] + fail_df["check"].astype(str).tolist()
+    chosen = st.selectbox(
+        "Inspect a check",
+        options=check_options,
+        index=0,
+        help="Narrow the table to the repositories failing one specific check.",
+    )
+    selected_check = None if chosen == check_options[0] else chosen
 
     filtered = df
     if selected_check:
         fail_mask = filtered[selected_check].astype(str).str.lower().isin(["false", "0", "no", "fail", "failing"])
         filtered = filtered[fail_mask]
-        st.info(f"Filtered by selected bar: {selected_check}")
+        st.caption(f"{len(filtered)} repositories fail `{selected_check}`.")
 
     result = filtered[["repo_name", "score_composite", "score_letter"]].sort_values("score_composite")
-    result = result.copy()
-    result["repo_link"] = result["repo_name"].map(
-        lambda repo: share_link({"tab": "detail", "repo": str(repo)})
-    )
-    st.dataframe(
+    repo_table(
         result,
-        width="stretch",
-        column_config={"repo_link": st.column_config.LinkColumn("Repo Detail Link")},
+        link_to_detail=True,
+        empty_message="No repositories fail the selected check.",
     )
     share_link_block(
         share_link({"tab": "failing-checks", "category": selected_check or ""}),

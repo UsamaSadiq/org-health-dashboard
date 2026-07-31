@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 from rapidfuzz import fuzz
 
 from dashboard.lib.config import get_config, get_feature_flags
-from dashboard.data import load_history, load_snapshot
+from dashboard.data import load_scored_history, load_scored_snapshot
 from dashboard.lib.linking import github_issue_url, github_pr_compare_url
 from dashboard.lib.remediation import get_remediation
+from dashboard.lib.schema import humanize_check
 from dashboard.lib.scorecard import fetch_scorecard_result
-from dashboard.lib.scoring import calculate_scores
 from dashboard.lib.share import base_url, share_link
-from dashboard.ui import grade_pill, share_link_block, status_chip
-from dashboard.ui.charts import sparkline
+from dashboard.ui import empty_state, page_init, grade_pill, repo_table, share_link_block, status_chip
+from dashboard.ui.charts import metric_score_bar, sparkline
 
 
 CATEGORY_GROUPS: dict[str, callable] = {
@@ -65,11 +64,17 @@ def _category_stats(row: pd.Series, category_cols: list[str]) -> tuple[int, int,
     return pass_count, fail_count, na_count
 
 
-@st.cache_data(ttl=600, show_spinner=False)
 def _history_for_repo(repo: str) -> list[dict]:
+    """Per-snapshot rows for one repository.
+
+    Deliberately not cached per repo: the underlying history is already cached by
+    load_scored_history, and a per-repo layer meant browsing 20 repositories held
+    20 slices of the same 30-day window (backlog H6). Filtering a cached frame is
+    cheap; storing it 20 times is not.
+    """
     try:
-        history = load_history(days=30)
-    except Exception:
+        history = load_scored_history(days=30)
+    except Exception:  # noqa: BLE001 - absent history is normal
         return []
     out = []
     for snapshot in history:
@@ -92,21 +97,6 @@ def _repo_sparkline(repo: str, cols: list[str]) -> pd.DataFrame:
             continue
         points.append({"date": entry["date"], "pass_rate": round((pass_count / total) * 100, 2)})
     return pd.DataFrame(points)
-
-
-def _metric_radar(repo_row: pd.Series) -> go.Figure:
-    per_metric = repo_row.get("score_per_metric", {}) or {}
-    unavailable = set(repo_row.get("score_unavailable_metrics", []) or [])
-    labels = list(per_metric.keys()) + [name for name in unavailable if name not in per_metric]
-    if not labels:
-        labels = ["no_metrics"]
-
-    values = [per_metric.get(label, 100.0 if label in unavailable else 0.0) for label in labels]
-    fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(r=values, theta=labels, fill="toself", name=str(repo_row.get("repo_name", "Selected"))))
-
-    fig.update_layout(polar={"radialaxis": {"visible": True, "range": [0, 100]}}, showlegend=True)
-    return fig
 
 
 def _category_card(category: str, repo: str, row: pd.Series, cols: list[str], *, key_prefix: str) -> dict[str, int]:
@@ -140,12 +130,24 @@ def _render_check_expander(check: str, repo_row: pd.Series, selected_repo: str, 
     bucket = _classify(value)
     label_chip = status_chip(bucket, bucket.upper())
     short_desc = descriptions.get(check, {}).get("description", "No description available.")
-    header_label = f"{check}"
+    # Status and a readable title in the *collapsed* header: previously every row
+    # showed only the raw column name, so learning a check's state meant opening
+    # it. A styled chip cannot go here (expander labels take limited markdown), so
+    # the state is a text marker, which also keeps colour from being the only signal.
+    marker = {"pass": "PASS", "fail": "FAIL"}.get(bucket, "—")
+    header_label = f"`{marker}`  {humanize_check(check, descriptions)}"
 
     with st.expander(header_label, expanded=False):
         st.markdown(label_chip, unsafe_allow_html=True)
-        st.caption(short_desc)
-        st.code(f"value = {value!r}", language="python")
+        st.caption(f"`{check}` · {short_desc}")
+        # A Python repr ("value = 'False'") leaked the implementation. Show the
+        # value plainly, and say so when absent rather than printing None/nan.
+        rendered = str(value).strip()
+        st.markdown(
+            f"**Value:** `{rendered}`"
+            if rendered and rendered.lower() != "nan"
+            else "**Value:** _not recorded_"
+        )
 
         remediation = get_remediation(check)
         if bucket == "fail" and remediation:
@@ -179,12 +181,17 @@ def _render_check_expander(check: str, repo_row: pd.Series, selected_repo: str, 
 
 
 def render() -> None:
+    page_init()
     st.title("Repository Detail")
 
     feature_flags = get_feature_flags()
-    df = calculate_scores(load_snapshot())
+    df = load_scored_snapshot()
     if df.empty:
-        st.error("No data available.")
+        empty_state(
+            "error",
+            "No snapshot available.",
+            "The upstream CSV and the local cache are both empty.",
+        )
         return
 
     repos = sorted(df["repo_name"].dropna().astype(str).tolist())
@@ -196,7 +203,11 @@ def render() -> None:
     selected = st.selectbox("Repository", options=options, index=0 if options else None, key="detail_selected")
 
     if not selected:
-        st.info("Pick a repository to see its detail.")
+        empty_state(
+            "info",
+            "Pick a repository to see its detail.",
+            "Type part of a name above, or arrive here from a link on Overview.",
+        )
         return
 
     repo_row = df[df["repo_name"] == selected].iloc[0]
@@ -217,14 +228,44 @@ def render() -> None:
     )
     structural = repo_row.get("score_structural")
     activity = repo_row.get("score_activity")
-    sum_a, sum_b, sum_c, sum_d, sum_e = st.columns(5)
+    category_measured = repo_row.get("score_category_measured_weight", {}) or {}
+
+    def _subscore(value: object, category: str, base_help: str) -> tuple[str, str]:
+        """Format a sub-score, refusing to look confident when it isn't.
+
+        Activity renders a hard 100.0 on the live snapshot while four of its five
+        metrics have no column at all, which implies the same confidence as a
+        fully-measured Structural score sitting next to it. Below a majority of
+        measured weight the number is withheld rather than dressed with a
+        footnote nobody reads.
+        """
+        fraction = float(category_measured.get(category, 1.0) or 0.0)
+        if value is None:
+            return "—", f"{base_help} Not computable from this snapshot."
+        if fraction < 0.5:
+            return (
+                "—",
+                f"{base_help} Withheld: only {fraction:.0%} of this category's "
+                f"weight is measured, so the number would be mostly the fixed "
+                f"default of 50.",
+            )
+        suffix = "" if fraction > 0.999 else f" {fraction:.0%} of this category's weight is measured."
+        return f"{float(value):.1f}", base_help + suffix
+
+    struct_text, struct_help = _subscore(
+        structural, "structural", "Baseline compliance: README, CI, openedx.yaml, deps."
+    )
+    act_text, act_help = _subscore(
+        activity,
+        "activity",
+        "Commit recency, PR response time, PR closure ratio, release frequency and contributor signals.",
+    )
+
+    sum_a, sum_b, sum_c, sum_d = st.columns(4)
     sum_a.metric("Composite", f"{repo_row['score_composite']:.1f}")
     sum_b.metric("Grade", repo_row["score_letter"])
-    sum_c.metric("Structural", f"{structural:.1f}" if structural is not None else "—",
-                 help="Baseline compliance: README, CI, openedx.yaml, deps.")
-    sum_d.metric("Activity", f"{activity:.1f}" if activity is not None else "—",
-                 help="Commit recency, PR response time, PR closure ratio, release frequency, and contributor signals (each scored when present in the snapshot).")
-    sum_e.metric("Scoring config", str(repo_row.get("score_config_version", "unknown")))
+    sum_c.metric("Structural", struct_text, help=struct_help)
+    sum_d.metric("Activity", act_text, help=act_help)
 
     share_link_block(
         share_link({"tab": "detail", "repo": selected}),
@@ -232,7 +273,14 @@ def render() -> None:
     )
 
     # ------------------------------------------------------- single-repo view
-    st.plotly_chart(_metric_radar(repo_row), width="stretch", key=f"radar-{selected}")
+    st.plotly_chart(
+        metric_score_bar(repo_row), width="stretch", key=f"metrics-{selected}",
+        config={"displayModeBar": False},
+    )
+    st.caption(
+        f"Scoring config {repo_row.get('score_config_version', 'unknown')} · "
+        "bars show each metric's contribution; unmeasured metrics are marked."
+    )
 
     if feature_flags.get("enable_scorecard_panel", False):
         with st.expander("OpenSSF Scorecard parity", expanded=False):
@@ -242,7 +290,11 @@ def render() -> None:
                 scorecard = None
                 st.warning(f"Unable to fetch Scorecard data: {exc}")
             if scorecard is None:
-                st.info("No public OpenSSF Scorecard result found for this repository.")
+                empty_state(
+                    "info",
+                    "No public OpenSSF Scorecard result for this repository.",
+                    "Scorecard publishes results only for repositories it has scanned.",
+                )
             else:
                 m1, m2 = st.columns(2)
                 m1.metric("Scorecard score", f"{scorecard.score:.2f}" if scorecard.score is not None else "n/a")
@@ -251,10 +303,10 @@ def render() -> None:
                     checks_df = pd.DataFrame(
                         [{"check": item.name, "score": item.score, "reason": item.reason} for item in scorecard.checks]
                     )
-                    st.dataframe(checks_df.sort_values("check"), width="stretch", hide_index=True)
+                    repo_table(checks_df.sort_values("check"))
 
     # ----------------------------------------------------- category cards
-    st.subheader("Category overview")
+    st.header("Category overview")
     categories = _category_columns(df)
     grid_cols = st.columns(min(3, max(1, len(categories))))
     for idx, (category, cols) in enumerate(categories.items()):
@@ -268,12 +320,12 @@ def render() -> None:
     if not check_cols:
         return
 
-    st.subheader("Checks")
+    st.header("Checks")
     control_left, control_right = st.columns([3, 2])
     with control_left:
         filter_choice = st.radio(
             "Filter",
-            options=["Failing only", "All", "Passing", "Unknown"],
+            options=["Failing", "Passing", "Unknown", "All"],
             horizontal=True,
             index=0,
             key="detail_filter",
@@ -290,7 +342,7 @@ def render() -> None:
     pr_cfg = get_config("pr_templates")
     whitelisted = set(pr_cfg.get("whitelist", []))
 
-    bucket_for_choice = {"Failing only": "fail", "Passing": "pass", "Unknown": "unknown"}.get(filter_choice)
+    bucket_for_choice = {"Failing": "fail", "Passing": "pass", "Unknown": "unknown"}.get(filter_choice)
     visible_checks = []
     for check in sorted(check_cols):
         if category_choice != "All":
@@ -302,7 +354,11 @@ def render() -> None:
 
     st.caption(f"{len(visible_checks)} of {len(check_cols)} checks shown.")
     if not visible_checks:
-        st.success("Nothing to show for the current filter.")
+        empty_state(
+            "info",
+            "No checks match this filter.",
+            "Switch the filter to All, or pick a different category.",
+        )
         return
 
     for check in visible_checks:

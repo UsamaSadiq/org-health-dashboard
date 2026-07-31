@@ -4,6 +4,18 @@ pandas==3.0.3
 plotly==6.7.0
 pydantic==2.13.4
 pyyaml==6.0.2
-rapidfuzz>=3.11.0
+# Pinned, not floating: rapidfuzz scores the fuzzy repo search in
+# pages/02_repo_detail.py. A scorer or tie-breaking change inside a minor
+# release reorders search results with no visible error, so the pin keeps
+# "which repo comes first" reproducible.
+rapidfuzz==3.14.5
 requests==2.34.2
+# Do not float this pin. dashboard/ui/theme.py styles Streamlit's internals
+# through generated st-emotion-cache-* class names and data-testid selectors,
+# and it already carries four defensive comments about how brittle that is
+# (notably the one explaining that a too-broad selector makes Material icons
+# render as literal ligature text, e.g. "arrow_drop_down"). Streamlit is free
+# to change those internals in a minor release, so a bump can break the sidebar
+# and chart styling with no error anywhere.
+# After any Streamlit bump, run: python scripts/ux_audit.py --mode diff
 streamlit==1.57.0

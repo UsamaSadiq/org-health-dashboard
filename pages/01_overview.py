@@ -5,16 +5,19 @@ from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
 
-from dashboard.data import export_json_payload, load_config, load_snapshot
-from dashboard.lib.scoring import calculate_scores
+from dashboard.data import export_json_payload, load_config, load_scored_snapshot
 from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
 from dashboard.lib.share import share_link
-from dashboard.data import load_history
+from dashboard.lib.tiers import tier_counts
+from dashboard.data import load_scored_history
 from dashboard.ui import (
+    page_init,
+    render_freshness_banner,
     card,
     render_empty_state,
     render_repo_pill_list,
     render_sidebar_filters,
+    repo_table,
     share_link_block,
 )
 from dashboard.ui.charts import (
@@ -68,23 +71,40 @@ def _top_failing(frame: pd.DataFrame, limit: int = 10) -> pd.DataFrame:
 def _baseline_frame() -> pd.DataFrame | None:
     """Return the earliest snapshot in the last 7 days, scored, for KPI deltas."""
     try:
-        history = load_history(days=7)
+        history = load_scored_history(days=7)
     except Exception:
         return None
     if len(history) < 2:
         return None
-    return calculate_scores(history[0].df)
+    return history[0].df
+
+
+def _history_span() -> tuple[object, object] | None:
+    """First and last snapshot dates actually available, for labelling.
+
+    Charts used to be captioned "30d" regardless of what history existed, and the
+    local cache can be months stale relative to the current snapshot, so a trend
+    line could be labelled as recent while showing May data under a July
+    snapshot. Callers label with the real span instead.
+    """
+    try:
+        history = load_scored_history(days=30)
+    except Exception:
+        return None
+    if len(history) < 2:
+        return None
+    return history[0].timestamp, history[-1].timestamp
 
 
 def _top_movers(frame: pd.DataFrame) -> pd.DataFrame:
     try:
-        history = load_history(days=30)
+        history = load_scored_history(days=30)
     except Exception:
         return pd.DataFrame()
     if len(history) < 2:
         return pd.DataFrame()
 
-    baseline = calculate_scores(history[0].df)
+    baseline = history[0].df
     recent = frame[["repo_name", "score_composite"]]
     merged = recent.merge(
         baseline[["repo_name", "score_composite"]].rename(columns={"score_composite": "baseline_score"}),
@@ -98,7 +118,8 @@ def _top_movers(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def render() -> None:
-    df = load_snapshot()
+    page_init()
+    df = load_scored_snapshot()
     if df.empty:
         st.title("Open edX Repository Health Dashboard")
         render_empty_state(
@@ -110,7 +131,6 @@ def render() -> None:
             st.rerun()
         return
 
-    df = calculate_scores(df)
     snapshot_date = (
         parse_snapshot_date(df[TIMESTAMP_COL].iloc[0]) if TIMESTAMP_COL in df.columns else None
     )
@@ -121,25 +141,58 @@ def render() -> None:
 
     # ------------------------------------------------------------------ header
     st.title("Open edX Repository Health")
-    st.caption(
-        f"Snapshot {snapshot_date.isoformat() if snapshot_date else 'unknown'} · "
-        "drill in via the sidebar nav."
-    )
+    # The snapshot date already appears under the gauge, and "drill in via the
+    # sidebar nav" told the reader nothing they could not see. Use the configured
+    # tagline instead, which was defined in org_branding.yaml and never rendered.
+    branding = load_config("org_branding")
+    tagline = str(branding.get("tagline") or "").strip()
+    if tagline:
+        st.caption(tagline)
 
     filters = render_sidebar_filters(
         snapshot_date=snapshot_date,
         stale_hours=stale_hours,
         critical_hours=critical_hours,
+        tier_counts=tier_counts(df),
     )
     working = filters.apply(df)
-
-    # Post-filter counter in the sidebar.
-    with st.sidebar:
-        st.caption(f"Showing {len(working)} of {len(df)} repos")
+    filters.report_result_count(len(working), len(df))
 
     if working.empty:
-        st.warning("No repositories match the current filters.")
+        empty_state(
+            "info",
+            "No repositories match the current filters.",
+            "Clear the search box or widen the tier filter in the sidebar.",
+        )
         return
+
+    # Snapshot age, in the main content area. Until now the only signal was a
+    # small amber dot on a chip partway down a dark sidebar, for data three days
+    # past its own stale threshold (C2/E10). Renders nothing when fresh.
+    render_freshness_banner(snapshot_date, stale_hours, critical_hours)
+
+    # A composite built half from default_when_missing needs saying out loud,
+    # above the fold, not implying in a tile. See docs/UX_REVIEW_BACKLOG.md B1.
+    measured = (
+        float(working["score_measured_weight"].mean())
+        if "score_measured_weight" in working.columns
+        else 1.0
+    )
+    if measured < 0.8:
+        missing = sorted(
+            {
+                name
+                for metrics in working.get("score_unavailable_metrics", [])
+                if isinstance(metrics, list)
+                for name in metrics
+            }
+        )
+        st.warning(
+            f"**Scores are directional.** Only {measured:.0%} of the scoring weight "
+            f"can be computed from this snapshot; the rest falls back to a fixed "
+            f"default of 50, which moves no repository up or down relative to any "
+            f"other. Not collected: {', '.join(missing) if missing else 'unknown'}."
+        )
 
     # ----------------------------------------------------------- 1. signals
     baseline = _baseline_frame()
@@ -152,7 +205,7 @@ def render() -> None:
     )
 
     # --------------------------------------------------- 1b. grade ribbon
-    st.markdown("##### Grade mix")
+    st.header("Grade mix")
     st.plotly_chart(
         grade_ribbon(working),
         width="stretch",
@@ -168,13 +221,22 @@ def render() -> None:
     with category_tab:
         category_df = _category_pass_rates(working)
         if category_df.empty:
-            st.info("No categorizable check columns in this snapshot.")
+            empty_state(
+                "warn",
+                "No categorisable check columns in this snapshot.",
+                "The upstream CSV may have changed shape; per-category rates cannot "
+                "be computed.",
+            )
         else:
             st.plotly_chart(category_pass_rate_bar(category_df), width="stretch")
     with failing_tab:
         fail_df = _top_failing(working)
         if fail_df.empty:
-            st.success("No failing checks in the current filter scope.")
+            empty_state(
+                "good",
+                "No failing checks in the current filter scope.",
+                "Every check passes for the repositories currently shown.",
+            )
         else:
             st.plotly_chart(top_failing_bar(fail_df), width="stretch")
             st.caption("Drill down on individual checks in **Failing Checks**.")
@@ -184,7 +246,7 @@ def render() -> None:
         "score_composite", ascending=False
     )
 
-    st.subheader(":material/leaderboard: Highlights")
+    st.header(":material/leaderboard: Highlights")
 
     def _repo_link(repo: str) -> str:
         return share_link({"tab": "detail", "repo": repo})
@@ -207,35 +269,48 @@ def render() -> None:
 
     movers = _top_movers(working)
     if not movers.empty:
+        span = _history_span()
+        # Label with the real span. "(30d)" was hardcoded regardless of how much
+        # history existed, and the cached history can be months behind the
+        # snapshot, so the label could claim recency the data did not have.
+        span_label = (
+            f"{span[0].isoformat()} → {span[1].isoformat()}"
+            if span
+            else "available history"
+        )
+        gainers = movers[movers["delta"] > 0].nlargest(5, "delta")
+        # nsmallest with a negative filter, not tail(): sorting descending and
+        # taking the tail labels the five smallest *gains* as losses whenever
+        # every repository improved.
+        losers = movers[movers["delta"] < 0].nsmallest(5, "delta")
+
         mv_left, mv_right = st.columns(2)
         with mv_left:
-            st.markdown("**Biggest gainers (30d)**")
-            st.dataframe(
-                movers.head(5)[["repo_name", "delta"]],
-                width="stretch",
-                hide_index=True,
+            st.markdown("**Biggest gainers**")
+            repo_table(
+                gainers,
+                columns=["repo_name", "delta"],
+                empty_message="No repositories improved over this window.",
             )
         with mv_right:
-            st.markdown("**Biggest losers (30d)**")
-            st.dataframe(
-                movers.tail(5)[["repo_name", "delta"]].sort_values("delta"),
-                width="stretch",
-                hide_index=True,
+            st.markdown("**Biggest losers**")
+            repo_table(
+                losers,
+                columns=["repo_name", "delta"],
+                empty_message="No repositories declined over this window.",
             )
+        st.caption(f"Composite score change · {span_label} (UTC)")
 
     # ---------------------------------------- 4. full table (collapsed default)
     with st.expander(f"Full table — {len(ranked)} repos", expanded=False):
-        table_with_links = ranked.copy()
-        table_with_links["repo_link"] = table_with_links["repo_name"].map(
-            lambda repo: share_link({"tab": "detail", "repo": str(repo)})
-        )
-        st.dataframe(
-            table_with_links,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "repo_link": st.column_config.LinkColumn("Open in Repo Detail"),
-            },
+        # Bounded height so the workhorse table stays navigable instead of
+        # running to several thousand pixels; the score bar makes the ranking
+        # readable at a glance (backlog D11).
+        repo_table(
+            ranked,
+            link_to_detail=True,
+            use_progress=True,
+            height=460,
         )
 
     # --------------------------------------------- 5. share + export footer

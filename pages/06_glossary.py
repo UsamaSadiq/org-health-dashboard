@@ -7,6 +7,8 @@ import streamlit as st
 
 from dashboard.data import load_config, load_snapshot
 from dashboard.lib.remediation import missing_remediation_checks
+from dashboard.lib.schema import humanize_check
+from dashboard.ui import empty_state, page_init
 
 PASS_TOKENS = {"true", "1", "yes"}
 FAIL_TOKENS = {"false", "0", "no", "fail", "failing"}
@@ -51,8 +53,12 @@ def _coverage(series: pd.Series) -> tuple[float, float]:
 def _render_check(check: str, *, descriptions: dict, score_map: dict, df: pd.DataFrame,
                   missing_desc: set, missing_remediation: set) -> None:
     info = descriptions.get(check, {})
-    title = info.get("title") or check
-    with st.expander(f"**{title}**  ·  `{check}`"):
+    # humanize_check tidies the raw column when no title is configured, which is
+    # the case for 63 of 76 checks. Previously the fallback was the column name
+    # itself, so the header read "exists..coveragerc · exists..coveragerc".
+    title = humanize_check(check, descriptions)
+    header = f"**{title}**" if title == check else f"**{title}**  ·  `{check}`"
+    with st.expander(header):
         st.write(info.get("description", "_No description entry yet._"))
 
         score = score_map.get(check)
@@ -124,6 +130,7 @@ def _render_candidates() -> None:
 
 
 def render() -> None:
+    page_init()
     st.title("Checks Catalog")
     st.caption(
         "Every health check currently collected, what it measures, whether it "
@@ -137,7 +144,11 @@ def render() -> None:
     check_columns = sorted([col for col in df.columns if _is_check_col(col)]) if not df.empty else []
 
     if not check_columns:
-        st.warning("No check columns detected in snapshot.")
+        empty_state(
+            "warn",
+            "No check columns detected in this snapshot.",
+            "The catalogue below still lists proposed checks.",
+        )
         _render_candidates()
         return
 

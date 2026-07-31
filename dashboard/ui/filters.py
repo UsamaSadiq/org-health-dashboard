@@ -23,6 +23,15 @@ class FilterState:
     search: str
     include_archived: bool
     tier: str
+    # Sidebar slot reserved next to the filter controls, filled by
+    # report_result_count() once the caller knows how many rows survived.
+    count_slot: object | None = None
+
+    def report_result_count(self, shown: int, total: int) -> None:
+        """Write the post-filter count into the reserved sidebar slot."""
+        if self.count_slot is None:
+            return
+        self.count_slot.caption(f"Showing {shown} of {total} repositories")
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if df.empty:
@@ -51,8 +60,14 @@ def render_sidebar_filters(
     snapshot_date: date | None = None,
     stale_hours: int = 48,
     critical_hours: int = 168,
+    tier_counts: dict[str, int] | None = None,
 ) -> FilterState:
-    """Render the shared filter group in the sidebar. Returns the live state."""
+    """Render the shared filter group in the sidebar. Returns the live state.
+
+    Args:
+        tier_counts: Repositories per tier, from ``dashboard.lib.tiers``. When
+            supplied, tier options carry their counts.
+    """
     with st.sidebar:
         chip_html = freshness_chip_html(snapshot_date, stale_hours, critical_hours)
         st.markdown(
@@ -80,16 +95,33 @@ def render_sidebar_filters(
             if show_archived
             else False
         )
+        # Counts in the labels, including zeros. tiers.yaml classifies only a
+        # handful of repositories today, so "critical (0)" is honest where a bare
+        # "critical" implies a curated list exists.
+        def _tier_label(value: str) -> str:
+            if tier_counts is None:
+                return value.title()
+            if value == "all":
+                return f"All ({sum(tier_counts.values())})"
+            return f"{value.title()} ({tier_counts.get(value, 0)})"
+
         tier = (
             st.selectbox(
                 "Tier",
                 TIER_OPTIONS,
                 index=TIER_OPTIONS.index(st.session_state.get("filter_tier", "all")),
                 key="filter_tier",
+                format_func=_tier_label,
             )
             if show_tier
             else "all"
         )
+
+        # Result count belongs directly under the controls that produce it, but
+        # it is not known until the caller applies the filters. Reserve the slot
+        # here and let report_result_count() fill it, rather than emitting the
+        # caption after every other sidebar widget as the page used to.
+        count_slot = st.empty()
 
         st.markdown("---")
         st.toggle(
@@ -99,7 +131,12 @@ def render_sidebar_filters(
             help="Switches the dashboard to a dark palette.",
         )
 
-    return FilterState(search=search, include_archived=include_archived, tier=tier)
+    return FilterState(
+        search=search,
+        include_archived=include_archived,
+        tier=tier,
+        count_slot=count_slot,
+    )
 
 
 def hydrate_from_query_params() -> None:
