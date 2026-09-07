@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from dashboard.lib.ordering import bottom, rank, top
 
@@ -88,12 +89,40 @@ def test_explicit_tiebreak_column_is_honoured():
     assert list(top(frame, "failing", 2, tiebreak="check")["check"]) == ["a.check", "b.check"]
 
 
-def test_missing_tiebreak_column_is_tolerated():
-    """Not every ranked frame carries repo_name; those callers pass their own,
-    and a frame with neither must still sort rather than raise."""
+def test_missing_tiebreak_column_raises_rather_than_sorting_partially():
+    """Silently skipping an absent tiebreak gives back the non-total order the
+    module exists to prevent, and the caller cannot tell. Failing Checks shipped
+    exactly that: no repo_name in the frame, so its checks ranked by CSV column
+    order while Overview ranked the same checks alphabetically."""
     frame = pd.DataFrame({"value": [3, 1, 2]})
 
-    assert list(rank(frame, "value")["value"]) == [1, 2, 3]
+    with pytest.raises(KeyError, match="repo_name"):
+        rank(frame, "value")
+
+
+def test_tiebreak_none_is_the_explicit_opt_out():
+    frame = pd.DataFrame({"value": [3, 1, 2]})
+
+    assert list(rank(frame, "value", tiebreak=None)["value"]) == [1, 2, 3]
+
+
+def test_bottom_and_a_reversed_top_select_the_same_repos_at_a_tie_boundary():
+    """The Overview defect: reversing a descending rank also reverses its
+    tiebreak, so a tie straddling the cut selects the alphabetically last of the
+    tied repos instead of the first."""
+    frame = pd.DataFrame(
+        {
+            "repo_name": [f"openedx/{c}" for c in "abcdef"],
+            "score_composite": [1.0, 2.0, 3.0, 3.0, 3.0, 3.0],
+        }
+    )
+
+    naive = list(rank(frame, "score_composite", ascending=False).tail(3)["repo_name"][::-1])
+    correct = list(bottom(frame, "score_composite", 3)["repo_name"])
+
+    assert correct == ["openedx/a", "openedx/b", "openedx/c"]
+    assert naive == ["openedx/a", "openedx/b", "openedx/f"]
+    assert naive != correct
 
 
 def test_empty_frame_passes_through():

@@ -72,7 +72,7 @@ it. Investigate first, always.
 
 ### What makes the diff reproducible
 
-Rendering is a function of the code, and of nothing else. Three inputs that would
+Rendering is very nearly a function of the code alone. Five inputs that would
 otherwise move on their own are pinned:
 
 | Input | Pinned by | Without it |
@@ -83,11 +83,24 @@ otherwise move on their own are pinned:
 | The build's commit | `GITHUB_SHA`, overwritten by the harness | The bulletin's "Commit: &lt;sha&gt;" provenance line changes on every commit, and is absent outside CI |
 | Tie order in every ranking | [dashboard/lib/ordering.py](../dashboard/lib/ordering.py) | Repos on equal scores permute between machines, so "Top 5" is a different five |
 
-[scripts/uxaudit/app.py](../scripts/uxaudit/app.py) sets all three for the
-Streamlit child process, so every mode gets them without you doing anything. To
-render live data instead — reproducing a bug that only appears on current
+The first four are environment variables, and
+[scripts/uxaudit/app.py](../scripts/uxaudit/app.py) sets all four for the
+Streamlit child process, so every mode gets them without you doing anything. The
+fifth is pinned in application code rather than by the harness, because a
+ranking that permutes between machines is a bug for readers too, not just for the
+gate.
+
+To render live data instead — reproducing a bug that only appears on current
 upstream data — set `DASHBOARD_DATA_FIXTURE=` to an explicit empty value. A
 baseline captured that way is not comparable with the committed ones.
+
+**"Very nearly", not "entirely".** One input is still outside our control:
+`dashboard/ui/theme.py` `@import`s Inter from Google Fonts, so every glyph is
+fetched at capture time. If that fetch fails the page renders in the `system-ui`
+fallback, every text run reflows, and all 14 images differ. The capture now
+aborts with an explicit message rather than writing fallback-rendered PNGs, so
+this costs a rerun rather than a bad baseline — but a runner with no egress to
+`fonts.googleapis.com` cannot run the gate. Vendoring the font is backlog H10.
 
 Nothing is masked, and that is the goal rather than a coincidence. The bulletin's
 "Generated:" timestamp used to need a mask because it read the wall clock at
@@ -116,18 +129,35 @@ scripts/ux_audit_container.sh --mode baseline
 ```
 
 That script takes the same arguments as `ux_audit.py` and needs only Docker
-running. The first run installs dependencies into a cached volume (~40s); later
-runs skip it, and a changed pin in `requirements*.txt` reinstalls automatically.
+running. It installs the pinned dependencies on every run — deliberately, since
+that is what keeps it identical to the CI step rather than merely similar — but a
+named volume caches pip's downloads, so after the first run the install is a
+local unpack of a few seconds rather than a re-download.
 
 Running `ux_audit.py` directly on your machine is still the right thing for
 `--mode a11y` and `--mode screenshots` — neither compares against a committed
 baseline, so host rendering is fine. Only `--mode diff` and `--mode baseline`
 need the container.
 
-The image tag appears in three places that must agree: the `container:` key in
+The image is pinned by **digest**, not by tag. A tag is a mutable pointer — this
+one is rebuilt for OS security patches, and a freetype or fontconfig change moves
+text rasterisation — so CI (which pulls fresh every job) and a contributor (whose
+Docker reuses a cached layer) would silently drift onto different images and
+reintroduce the cross-machine font failure the container exists to prevent.
+
+The digest appears in three places that must agree: the `container:` key in
 `.github/workflows/ux-audit.yml`, `IMAGE` in
 [scripts/ux_audit_container.sh](../scripts/ux_audit_container.sh), and the
-`playwright` pin in [requirements-dev.txt](../requirements-dev.txt).
+`playwright` pin in [requirements-dev.txt](../requirements-dev.txt). To move it:
+
+```bash
+docker pull mcr.microsoft.com/playwright/python:<new tag>
+docker image inspect mcr.microsoft.com/playwright/python:<new tag> \
+  --format '{{index .RepoDigests 0}}'
+```
+
+Update all three, regenerate the baselines in the same commit, and say in the
+message that the image moved — otherwise the baseline churn has no explanation.
 
 ### Refreshing the data fixture
 

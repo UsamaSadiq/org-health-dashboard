@@ -47,11 +47,8 @@ def _validate_snapshot(df: pd.DataFrame, cfg: dict[str, Any]) -> tuple[bool, lis
 
 
 def _fetch_snapshot_dataframe(cfg: dict[str, Any]) -> pd.DataFrame:
-    # A configured fixture replaces the network entirely; see dashboard.lib.fixtures.
-    pinned = fixtures.snapshot_path()
-    if pinned is not None:
-        return pd.read_csv(pinned)
-
+    # Fixture handling lives in load_snapshot, above the try/except that would
+    # otherwise swallow a misconfiguration. See the comment there.
     csv_url = cfg.get("csv_url", DEFAULT_CSV_URL)
     response = requests.get(csv_url, timeout=30)
     response.raise_for_status()
@@ -59,9 +56,10 @@ def _fetch_snapshot_dataframe(cfg: dict[str, Any]) -> pd.DataFrame:
 
 
 def _save_cache(df: pd.DataFrame) -> None:
-    # Never let pinned fixture data become the fallback a later live run reads.
-    if fixtures.is_active():
-        return
+    # Only ever reached on the live path: load_snapshot returns before here when
+    # a fixture is configured, so pinned data cannot become a later live run's
+    # fallback. One mechanism rather than two, so there is no question about
+    # which is authoritative.
     df.to_csv(_LAST_KNOWN_GOOD, index=False)
 
 
@@ -75,6 +73,28 @@ def _load_from_cache() -> pd.DataFrame:
 def load_snapshot() -> pd.DataFrame:
     """Fetch current snapshot with schema checks and fallback to last-known-good."""
     cfg = get_config("data_source")
+
+    # Resolved before the try, and deliberately outside it. A misconfigured
+    # fixture must reach the caller: the `except Exception` below exists to keep
+    # the dashboard up through an upstream outage, and it would otherwise
+    # swallow "your fixture path is wrong" and quietly serve the machine-local
+    # cache instead. That is the precise failure the fixture exists to prevent —
+    # a pinned run rendering unpinned data — and it would surface as a baseline
+    # captured from someone's stale cache. Also skips the cache entirely while
+    # pinned, so no path can substitute live data for fixture data.
+    pinned = fixtures.snapshot_path()
+    if pinned is not None:
+        df = pd.read_csv(pinned)
+        valid, missing = _validate_snapshot(df, cfg)
+        if not valid:
+            logger.warning(
+                "Fixture snapshot failed integrity checks (rows=%s cols=%s missing=%s)",
+                len(df),
+                len(df.columns),
+                missing,
+            )
+        return df
+
     fallback_enabled = bool(cfg.get("fallback_to_last_known_good", True))
     try:
         df = _fetch_snapshot_dataframe(cfg)

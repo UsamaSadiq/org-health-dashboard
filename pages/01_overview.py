@@ -258,9 +258,14 @@ def render() -> None:
         (str(r.repo_name), float(r.score_composite), str(r.score_letter))
         for r in ranked.head(5).itertuples(index=False)
     ]
+    # bottom(), not ranked.tail(5).iloc[::-1]. Reversing the ranked frame also
+    # reverses its alphabetical tiebreak, so a tie straddling the cut selected
+    # the alphabetically *last* of the tied repos: with two repos on 36.67, the
+    # list showed openedx/training-courses where every other bottom-ranking path
+    # shows openedx/olxcleaner. Same scores, different answer per call site.
     bottom_rows = [
         (str(r.repo_name), float(r.score_composite), str(r.score_letter))
-        for r in ranked.tail(5).iloc[::-1].itertuples(index=False)
+        for r in bottom(working, "score_composite", 5).itertuples(index=False)
     ]
     hi_left, hi_right = st.columns(2)
     with hi_left:

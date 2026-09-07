@@ -52,7 +52,7 @@ def render() -> None:
         )
         return
 
-    fail_df = rank(pd.DataFrame(rows), "fail_count", ascending=False)
+    fail_df = rank(pd.DataFrame(rows), "fail_count", ascending=False, tiebreak="check")
 
     st.header("Most-failed checks")
 
