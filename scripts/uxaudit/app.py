@@ -5,7 +5,14 @@ The harness owns the server rather than asking the operator to run
 and — more importantly — it makes the audited build unambiguous: whatever is on
 disk right now is what gets screenshotted.
 
-Three details are load-bearing:
+Four details are load-bearing:
+
+  * **The child renders pinned data at a pinned instant.** ``--mode diff`` is a
+    pixel comparison, so anything that repaints without a code change makes the
+    gate lie. Two things do: the live upstream CSV, and the wall clock (the
+    freshness chip, the staleness banner, Needing Attention). Both are pinned
+    through the child's environment — see ``FIXTURE_DIR`` and ``FROZEN_NOW``
+    below.
 
   * **Readiness is polled, not slept for.** Streamlit's own
     ``/_stcore/health`` endpoint answers ``ok`` once the tornado server is
@@ -38,6 +45,14 @@ from pathlib import Path
 # scripts/uxaudit/app.py -> repo root
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ENTRYPOINT = REPO_ROOT / "streamlit_app.py"
+
+# The pinned data the audited app renders, and the instant it renders it at.
+# FROZEN_NOW is midday on the fixture's own snapshot date, so the app renders its
+# fresh-data state rather than a staleness banner that would age daily even with
+# the clock frozen at some earlier point. Refreshing the fixture means re-pinning
+# this; see tests/fixtures/data/README.md.
+FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "data"
+FROZEN_NOW = "2026-08-31T12:00:00+00:00"
 
 _HEALTH_PATH = "/_stcore/health"
 _POLL_INTERVAL = 0.25
@@ -161,6 +176,18 @@ def running_app(port: int | None = None, *, timeout: float = 60.0) -> Iterator[s
     # the *harness* reproducible; it does not fix such ordering bugs, and those
     # are still worth fixing at the source with sorted().
     env["PYTHONHASHSEED"] = "0"
+    # Pin the data and the clock. Both are required for --mode diff to mean
+    # anything: without the fixture the page repaints whenever upstream moves,
+    # and without the frozen clock the freshness chip ("9d ago"), the staleness
+    # banner and the Needing Attention rules re-render every day. Either one
+    # alone leaves the gate failing on unchanged code.
+    #
+    # Set either variable yourself to override — `DASHBOARD_DATA_FIXTURE= ` (an
+    # explicit empty value) restores live fetching, which is what you want when
+    # reproducing a bug that only appears on current upstream data. A baseline
+    # captured that way is not comparable with the committed ones.
+    env.setdefault("DASHBOARD_DATA_FIXTURE", str(FIXTURE_DIR))
+    env.setdefault("DASHBOARD_FROZEN_NOW", FROZEN_NOW)
 
     command = [
         sys.executable,

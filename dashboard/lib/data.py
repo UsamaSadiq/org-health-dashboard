@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 import requests
 
+from dashboard.lib import fixtures
 from dashboard.lib.config import DASHBOARD_DIR, get_config
 from dashboard.lib.schema import LAST_PUSH_COL, REPO_COL, TIMESTAMP_COL, soft_assert_columns
 from dashboard.lib.trends import Snapshot, load_history as load_trend_history
@@ -46,6 +47,11 @@ def _validate_snapshot(df: pd.DataFrame, cfg: dict[str, Any]) -> tuple[bool, lis
 
 
 def _fetch_snapshot_dataframe(cfg: dict[str, Any]) -> pd.DataFrame:
+    # A configured fixture replaces the network entirely; see dashboard.lib.fixtures.
+    pinned = fixtures.snapshot_path()
+    if pinned is not None:
+        return pd.read_csv(pinned)
+
     csv_url = cfg.get("csv_url", DEFAULT_CSV_URL)
     response = requests.get(csv_url, timeout=30)
     response.raise_for_status()
@@ -53,6 +59,9 @@ def _fetch_snapshot_dataframe(cfg: dict[str, Any]) -> pd.DataFrame:
 
 
 def _save_cache(df: pd.DataFrame) -> None:
+    # Never let pinned fixture data become the fallback a later live run reads.
+    if fixtures.is_active():
+        return
     df.to_csv(_LAST_KNOWN_GOOD, index=False)
 
 
