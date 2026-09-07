@@ -31,10 +31,12 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-# A named volume for site-packages so the ~40s dependency install happens once
-# rather than on every invocation. Delete it with
-# `docker volume rm org-health-dashboard-audit-deps` after changing a pin.
-DEPS_VOLUME="org-health-dashboard-audit-deps"
+# A named volume for pip's download cache, so the dependency install is a local
+# unpack (a few seconds) rather than a re-download on every invocation. Only a
+# cache: the install itself still runs each time, which is what keeps this
+# identical to the CI step rather than merely similar. Drop it with
+# `docker volume rm org-health-dashboard-audit-pip` if it ever misbehaves.
+PIP_CACHE_VOLUME="org-health-dashboard-audit-pip"
 
 # -t only when stdout is a terminal, so CI and pipes still work.
 TTY_FLAG=()
@@ -42,22 +44,16 @@ TTY_FLAG=()
 
 exec docker run --rm "${TTY_FLAG[@]}" \
   -v "$REPO_ROOT":/work \
-  -v "$DEPS_VOLUME":/opt/audit-venv \
+  -v "$PIP_CACHE_VOLUME":/pip-cache \
   -w /work \
   -e HOME=/tmp \
+  -e PIP_CACHE_DIR=/pip-cache \
   -e PYTHONDONTWRITEBYTECODE=1 \
   "$IMAGE" \
   bash -euc '
-    # Reuse the cached venv when its marker matches the current pins, so a
-    # changed requirements file reinstalls instead of silently running stale
-    # versions — which would produce baselines nobody else can reproduce.
-    marker=/opt/audit-venv/.pins
-    current=$(cat requirements.txt requirements-dev.txt | sha256sum | cut -d" " -f1)
-    if [ ! -f "$marker" ] || [ "$(cat "$marker")" != "$current" ]; then
-      python -m venv /opt/audit-venv
-      /opt/audit-venv/bin/pip install --quiet --upgrade pip
-      /opt/audit-venv/bin/pip install --quiet -r requirements.txt -r requirements-dev.txt
-      printf %s "$current" > "$marker"
-    fi
-    exec /opt/audit-venv/bin/python scripts/ux_audit.py "$@"
+    # Exactly the install the workflow runs. The image is externally managed, so
+    # --break-system-packages is what puts these alongside its preinstalled
+    # playwright — the same flag, into the same interpreter, as CI.
+    pip install --quiet --break-system-packages -r requirements.txt -r requirements-dev.txt
+    exec python scripts/ux_audit.py "$@"
   ' bash "$@"
