@@ -264,16 +264,59 @@ def _header_rect(page: Page) -> dict[str, float] | None:
     return page.evaluate(_HEADER_RECT_JS)
 
 
-def _wait_for_fonts(page: Page) -> None:
-    """Block until webfonts are painted, or give up quietly.
+class FontNotLoadedError(RuntimeError):
+    """Inter did not load, so the capture would record fallback rendering."""
 
-    theme.py @imports Inter from Google Fonts. If capture races the font load,
-    every text run reflows and the diff is total but meaningless.
+
+def _wait_for_fonts(page: Page) -> None:
+    """Block until Inter is actually painted, and fail loudly if it is not.
+
+    theme.py ``@import``s Inter from Google Fonts, so every glyph in every
+    baseline comes from a network fetch at capture time. That is the one input
+    to the rendering this harness does not control — see the note in
+    docs/RUNBOOK.md and backlog H10.
+
+    This used to swallow both exceptions and return. Two ways that produced a
+    wrong baseline in silence: ``document.fonts.status`` reaches ``'loaded'``
+    when pending loads *settle*, which includes settling as failures, and a
+    timeout was ignored outright. Either way the capture proceeded in the
+    ``system-ui`` fallback, and since the fallback reflows every text run, the
+    result is a full-page diff on all 14 images with nothing in the report to
+    say why.
+
+    So the check is now what we actually depend on — is Inter available for use —
+    and a negative answer aborts the capture. A run that dies here with a clear
+    message costs a rerun; a green ``--mode baseline`` that quietly committed
+    fallback-rendered PNGs costs a debugging session for whoever hits the gate
+    next.
+
+    Raises:
+        FontNotLoadedError: If Inter is not usable within the timeout.
     """
     try:
-        page.wait_for_function("() => document.fonts && document.fonts.status === 'loaded'", timeout=10_000)
+        page.wait_for_function(
+            "() => document.fonts && document.fonts.status === 'loaded'", timeout=10_000
+        )
     except (PlaywrightTimeoutError, PlaywrightError):
-        pass
+        pass  # Fall through to the real check, which produces the better message.
+
+    try:
+        loaded = bool(page.evaluate("() => document.fonts.check('16px Inter')"))
+    except PlaywrightError as exc:  # pragma: no cover - page died mid-capture
+        raise FontNotLoadedError(f"could not query document.fonts: {exc}") from exc
+
+    if not loaded:
+        raise FontNotLoadedError(
+            "Inter is not loaded, so this capture would record the system-ui "
+            "fallback rather than the dashboard's real typography — every text "
+            "run reflows and the diff against tests/baseline/ would be total and "
+            "meaningless.\n"
+            "  The font is fetched from fonts.googleapis.com at render time "
+            "(dashboard/ui/theme.py), so the usual cause is no egress to it: an "
+            "offline machine, a proxy, or a runner behind an egress filter.\n"
+            "  Retry with network access. Backlog H10 tracks vendoring the font "
+            "so the harness stops depending on a third party being reachable."
+        )
 
 
 def _prerender(page: Page, geom: _Geometry) -> dict[str, float] | None:

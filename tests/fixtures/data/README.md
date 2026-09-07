@@ -45,8 +45,11 @@ base=https://raw.githubusercontent.com/openedx/wg-maintenance/main/dashboards
 curl -sSfo tests/fixtures/data/dashboard_main.csv    "$base/dashboard_main.csv"
 curl -sSfo tests/fixtures/data/dashboard_history.csv "$base/dashboard_history.csv"
 
-# Re-pin the clock to the new snapshot date in scripts/uxaudit/app.py, then:
-python scripts/ux_audit.py --mode baseline
+# Re-pin the clock to the new snapshot date in scripts/uxaudit/app.py, then
+# regenerate through the container - a host-rendered baseline fails CI on font
+# rasterisation alone, and in a commit with no code change to blame it reads as
+# a harness bug. See docs/RUNBOOK.md.
+scripts/ux_audit_container.sh --mode baseline
 ```
 
 Commit the refreshed CSVs and the regenerated baselines **in their own commit**,

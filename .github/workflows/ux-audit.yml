@@ -94,10 +94,21 @@ jobs:
     # Pinning the image makes the baselines reproducible off this runner too, so
     # a contributor on macOS or Windows can regenerate them and get bytes that
     # match CI: scripts/ux_audit_container.sh runs this exact image locally.
-    # Keep the tag in step with the playwright pin in requirements-dev.txt and
-    # with IMAGE in that script; all three must agree.
+    #
+    # By digest, not by tag. A tag is a mutable pointer: Microsoft rebuilds this
+    # one for OS security patches, and a freetype or fontconfig patch changes
+    # text rasterisation. CI pulls fresh every job while a contributor's Docker
+    # reuses whatever layer it already has, so the two would silently diverge and
+    # produce exactly the cross-machine font failure the container was introduced
+    # to eliminate — undiagnosable, because both sides believe they are on "the
+    # same image".
+    #
+    # Keep the digest in step with IMAGE in that script and with the playwright
+    # pin in requirements-dev.txt; all three must agree. To move it, pull the new
+    # tag, read `docker image inspect --format '{{index .RepoDigests 0}}'`, and
+    # regenerate the baselines in the same commit.
     container:
-      image: mcr.microsoft.com/playwright/python:v1.60.0-noble
+      image: mcr.microsoft.com/playwright/python:v1.60.0-noble@sha256:8ff591d613b01c884cc488339ed4318b4513eaf0c57a164a878ba49e70e3f384
     steps:
       - uses: actions/checkout@v4
       # No setup-python and no `playwright install`: the image already carries

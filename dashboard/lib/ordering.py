@@ -33,7 +33,7 @@ def rank(
     by: str | list[str],
     *,
     ascending: bool | list[bool] = True,
-    tiebreak: str = REPO_COL,
+    tiebreak: str | None = REPO_COL,
 ) -> pd.DataFrame:
     """Sort ``df`` by ``by``, breaking ties on ``tiebreak`` for a total order.
 
@@ -42,10 +42,19 @@ def rank(
         by: Column or columns to sort on, in priority order.
         ascending: Direction, per ``by`` column. A single bool applies to all.
         tiebreak: Unique column appended as the final sort key, always
-            ascending. Ignored if absent from the frame.
+            ascending. Pass ``None`` to sort without one, accepting that ties
+            then resolve by input order.
 
     Returns:
         A new frame with a reset index, ordered identically on every machine.
+
+    Raises:
+        KeyError: If ``tiebreak`` names a column the frame does not have.
+            Silently skipping it would give back exactly the non-total order
+            this function exists to prevent, with no way for the caller to
+            notice — which is what happened on Failing Checks, whose frame has
+            no ``repo_name`` and so ranked its checks by CSV column order while
+            Overview ranked the same checks alphabetically.
     """
     if df.empty:
         return df
@@ -53,16 +62,24 @@ def rank(
     columns = [by] if isinstance(by, str) else list(by)
     directions = [ascending] * len(columns) if isinstance(ascending, bool) else list(ascending)
 
-    if tiebreak in df.columns and tiebreak not in columns:
+    if tiebreak is not None and tiebreak not in columns:
+        if tiebreak not in df.columns:
+            raise KeyError(
+                f"rank() tiebreak column {tiebreak!r} is not in the frame "
+                f"(columns: {list(df.columns)}). Pass tiebreak=<a unique column> "
+                f"for this frame, or tiebreak=None to sort without a total order."
+            )
         columns.append(tiebreak)
         # Always ascending: the tiebreak exists to be predictable, not to carry
         # meaning, and flipping it with the primary key would make "the same
-        # repos in reverse" quietly stop being the same repos.
+        # repos in reverse" quietly stop being the same repos. That is also why
+        # callers wanting the worst rows use bottom() rather than reversing a
+        # descending rank().
         directions.append(True)
 
-    # mergesort is pandas' stable option. Stability is belt-and-braces given the
-    # explicit tiebreak, but it costs nothing and keeps the result well defined
-    # if a caller ever passes a tiebreak that is not actually unique.
+    # kind applies only on pandas' single-column path; a list of columns routes
+    # through lexsort_indexer, which ignores it and is stable regardless. Named
+    # here so the single-column, tiebreak=None case is stable too.
     return df.sort_values(columns, ascending=directions, kind="mergesort").reset_index(drop=True)
 
 

@@ -49,6 +49,57 @@ def test_incomplete_fixture_directory_raises_rather_than_falling_back(monkeypatc
         fixtures.history_path()
 
 
+def test_misconfigured_fixture_reaches_the_caller_through_load_snapshot(monkeypatch, tmp_path):
+    """The raise must survive load_snapshot's broad `except Exception`.
+
+    That handler exists to keep the dashboard up through an upstream outage. It
+    used to swallow "your fixture path is wrong" too, and then serve
+    `.cache/last_known_good.csv` — so a contributor with a warm cache and a typo
+    in the path got a green-looking `--mode baseline` run whose PNGs were
+    rendered from their own stale machine-local data. CI, with no cache, then
+    rendered the empty state and failed with a whole-page diff that reads as a
+    total UI regression.
+    """
+    from dashboard.lib import data
+
+    # A warm cache is what made the old behaviour silent rather than merely wrong.
+    cache_file = tmp_path / "last_known_good.csv"
+    cache_file.write_text("repo_name,TIMESTAMP\nopenedx/x,2026-08-31\n", encoding="utf-8")
+    monkeypatch.setattr(data, "_LAST_KNOWN_GOOD", cache_file)
+
+    monkeypatch.setenv(fixtures.FIXTURE_DIR_ENV, str(tmp_path / "typo"))
+    with pytest.raises(ValueError, match=fixtures.FIXTURE_DIR_ENV):
+        data.load_snapshot()
+
+    # Same for a directory that exists but is missing the snapshot file.
+    monkeypatch.setenv(fixtures.FIXTURE_DIR_ENV, str(tmp_path))
+    with pytest.raises(FileNotFoundError, match="dashboard_main.csv"):
+        data.load_snapshot()
+
+
+def test_fixture_run_never_reads_the_cache_even_when_the_fixture_is_invalid(monkeypatch, tmp_path):
+    """A pinned run must not substitute cache data for fixture data by any path,
+    including the failed-integrity-check branch."""
+    from dashboard.lib import data
+
+    cache_file = tmp_path / "last_known_good.csv"
+    cache_file.write_text("repo_name,TIMESTAMP\nopenedx/cached,2026-01-01\n", encoding="utf-8")
+    monkeypatch.setattr(data, "_LAST_KNOWN_GOOD", cache_file)
+
+    # A fixture that parses but fails the row/column minimums.
+    fixture_dir = tmp_path / "thin"
+    fixture_dir.mkdir()
+    (fixture_dir / "dashboard_main.csv").write_text(
+        "repo_name,TIMESTAMP\nopenedx/thin,2026-08-31\n", encoding="utf-8"
+    )
+    (fixture_dir / "dashboard_history.csv").write_text("repo_name,TIMESTAMP\n", encoding="utf-8")
+    monkeypatch.setenv(fixtures.FIXTURE_DIR_ENV, str(fixture_dir))
+
+    df = data.load_snapshot()
+
+    assert list(df["repo_name"]) == ["openedx/thin"], "cache leaked into a pinned run"
+
+
 def test_snapshot_loads_from_fixture_without_network(monkeypatch):
     """load_snapshot must not touch requests when a fixture is configured."""
     from dashboard.lib import data
