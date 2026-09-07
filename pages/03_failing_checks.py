@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from dashboard.data import load_scored_snapshot
+from dashboard.lib.ordering import rank
 from dashboard.lib.share import share_link
 from dashboard.ui import empty_state, page_init, repo_table, share_link_block
 from dashboard.ui.charts import top_failing_bar
@@ -51,7 +52,7 @@ def render() -> None:
         )
         return
 
-    fail_df = pd.DataFrame(rows).sort_values("fail_count", ascending=False)
+    fail_df = rank(pd.DataFrame(rows), "fail_count", ascending=False)
 
     st.header("Most-failed checks")
 
@@ -92,7 +93,7 @@ def render() -> None:
         filtered = filtered[fail_mask]
         st.caption(f"{len(filtered)} repositories fail `{selected_check}`.")
 
-    result = filtered[["repo_name", "score_composite", "score_letter"]].sort_values("score_composite")
+    result = rank(filtered[["repo_name", "score_composite", "score_letter"]], "score_composite")
     repo_table(
         result,
         link_to_detail=True,

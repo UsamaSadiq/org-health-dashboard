@@ -54,6 +54,12 @@ ENTRYPOINT = REPO_ROOT / "streamlit_app.py"
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "data"
 FROZEN_NOW = "2026-08-31T12:00:00+00:00"
 
+# Stands in for GITHUB_SHA so the bulletin's provenance line renders something
+# stable. Deliberately not a plausible hash: anyone reading it in a baseline
+# screenshot should be able to tell at a glance that it is a fixture value and
+# not the commit the screenshot came from.
+PINNED_COMMIT_SHA = "0000000000000000000000000000000000000000"
+
 _HEALTH_PATH = "/_stcore/health"
 _POLL_INTERVAL = 0.25
 _TERMINATE_GRACE = 5.0
@@ -188,6 +194,13 @@ def running_app(port: int | None = None, *, timeout: float = 60.0) -> Iterator[s
     # captured that way is not comparable with the committed ones.
     env.setdefault("DASHBOARD_DATA_FIXTURE", str(FIXTURE_DIR))
     env.setdefault("DASHBOARD_FROZEN_NOW", FROZEN_NOW)
+    # Not setdefault: GITHUB_SHA is already set to the real commit inside a CI
+    # job, and the bulletin prints it as a "Commit: <sha>" provenance line
+    # (pages/05_what_changed.py). Left alone, that line changes on every commit
+    # and is absent locally, so the page differs both between runs and between
+    # environments — it cost 25px of page height and a failed gate before this
+    # override existed. Overwritten unconditionally for that reason.
+    env["GITHUB_SHA"] = PINNED_COMMIT_SHA
 
     command = [
         sys.executable,

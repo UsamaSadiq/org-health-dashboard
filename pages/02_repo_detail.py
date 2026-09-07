@@ -7,6 +7,7 @@ from rapidfuzz import fuzz
 from dashboard.lib.config import get_config, get_feature_flags
 from dashboard.data import load_scored_history, load_scored_snapshot
 from dashboard.lib.linking import github_issue_url, github_pr_compare_url
+from dashboard.lib.ordering import rank
 from dashboard.lib.remediation import get_remediation
 from dashboard.lib.schema import humanize_check
 from dashboard.lib.scorecard import fetch_scorecard_result
@@ -303,7 +304,7 @@ def render() -> None:
                     checks_df = pd.DataFrame(
                         [{"check": item.name, "score": item.score, "reason": item.reason} for item in scorecard.checks]
                     )
-                    repo_table(checks_df.sort_values("check"))
+                    repo_table(rank(checks_df, "check", tiebreak="check"))
 
     # ----------------------------------------------------- category cards
     st.header("Category overview")

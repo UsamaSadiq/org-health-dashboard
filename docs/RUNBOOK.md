@@ -80,6 +80,8 @@ otherwise move on their own are pinned:
 | The two upstream CSVs | `tests/fixtures/data/`, via `DASHBOARD_DATA_FIXTURE` | Upstream churn — a repo added, a check flipping, a score moving a tenth — repaints the page with no code change |
 | The clock | `DASHBOARD_FROZEN_NOW`, via [dashboard/lib/clock.py](../dashboard/lib/clock.py) | The freshness chip ("9d ago"), the staleness banner and the Needing Attention rules re-render every day |
 | Set iteration order | `PYTHONHASHSEED=0` | Any page building a list from a set shuffles between runs |
+| The build's commit | `GITHUB_SHA`, overwritten by the harness | The bulletin's "Commit: &lt;sha&gt;" provenance line changes on every commit, and is absent outside CI |
+| Tie order in every ranking | [dashboard/lib/ordering.py](../dashboard/lib/ordering.py) | Repos on equal scores permute between machines, so "Top 5" is a different five |
 
 [scripts/uxaudit/app.py](../scripts/uxaudit/app.py) sets all three for the
 Streamlit child process, so every mode gets them without you doing anything. To
