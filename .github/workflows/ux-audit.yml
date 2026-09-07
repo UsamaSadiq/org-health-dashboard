@@ -84,14 +84,26 @@ jobs:
   visual:
     name: Visual diff
     runs-on: ubuntu-latest
+    # Pinned container, not the bare runner. Text rasterisation differs enough
+    # between operating systems — and between runner images as GitHub updates
+    # them — that a baseline captured anywhere else fails on font rendering
+    # alone: measured at 1.2-10.6% of pixels changed, whole-page bounding boxes,
+    # and page heights shifting 25px from line-wrap differences. That is far
+    # above any tolerance that would still catch a real defect.
+    #
+    # Pinning the image makes the baselines reproducible off this runner too, so
+    # a contributor on macOS or Windows can regenerate them and get bytes that
+    # match CI: scripts/ux_audit_container.sh runs this exact image locally.
+    # Keep the tag in step with the playwright pin in requirements-dev.txt and
+    # with IMAGE in that script; all three must agree.
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.60.0-noble
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-      - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: python -m playwright install --with-deps chromium
+      # No setup-python and no `playwright install`: the image already carries
+      # Python 3.12 and the matching browser build. Installing either again
+      # would be the thing that breaks parity with the local script.
+      - run: pip install --break-system-packages -r requirements.txt -r requirements-dev.txt
       - name: Diff every page against tests/baseline/
         # The app renders the pinned fixture at the pinned instant, so a
         # difference here is a UI change and nothing else. If this fails on a PR
