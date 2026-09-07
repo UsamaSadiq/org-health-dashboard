@@ -87,10 +87,14 @@ render live data instead — reproducing a bug that only appears on current
 upstream data — set `DASHBOARD_DATA_FIXTURE=` to an explicit empty value. A
 baseline captured that way is not comparable with the committed ones.
 
-The one remaining volatile region is the bulletin's "Generated:" timestamp, which
-moves every minute regardless. It is masked. Masks are declared in
-[scripts/uxaudit/pages.py](../scripts/uxaudit/pages.py) and kept deliberately
-narrow: a mask hides real regressions inside it.
+Nothing is masked, and that is the goal rather than a coincidence. The bulletin's
+"Generated:" timestamp used to need a mask because it read the wall clock at
+render time; pinning the clock removed the need. A mask is a blind spot — it
+hides any regression inside it, and its coordinates rot silently against layout
+change — so when something renders non-deterministically, pin the value rather
+than mask the pixels. `MASKS` in
+[scripts/uxaudit/pages.py](../scripts/uxaudit/pages.py) is where an entry would
+go if one were ever genuinely outside our control.
 
 ### Baselines are Linux-rendered — use the container
 
