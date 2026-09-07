@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 import requests
 
+from dashboard.lib import fixtures
 from dashboard.lib.config import DASHBOARD_DIR, get_config
 from dashboard.lib.schema import REPO_COL, TIMESTAMP_COL, parse_snapshot_date
 
@@ -41,6 +42,11 @@ def _fetch_history_frame(cfg: dict[str, Any]) -> pd.DataFrame | None:
     snapshot — no GitHub API calls at runtime (the locked architecture forbids
     them; unauthenticated API access is rate-limited on Streamlit Cloud).
     """
+    # A configured fixture replaces the network entirely; see dashboard.lib.fixtures.
+    pinned = fixtures.history_path()
+    if pinned is not None:
+        return pd.read_csv(pinned)
+
     url = _history_url(cfg)
     try:
         response = requests.get(url, timeout=30)

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 
 import streamlit as st
 
 from dashboard.data import load_config, load_snapshot
+from dashboard.lib.clock import now_utc
 from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
 
 # Deliberately does NOT call page_init(): this is a machine-readable liveness
@@ -16,7 +16,7 @@ from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
 
 def render() -> None:
     df = load_snapshot()
-    now = datetime.now(timezone.utc)
+    now = now_utc()
     version = "1.0.0"
     cfg = load_config("data_source")
 

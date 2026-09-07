@@ -1,24 +1,28 @@
 name: UX audit
 
-# One gate that unit tests cannot cover: axe-core against every page at desktop
-# and mobile. It blocks on the violations we own; Streamlit's own DOM defects are
-# allowlisted per-rule in scripts/uxaudit/a11y.py.
+# Two gates that unit tests cannot cover, both driving a real browser over every
+# page at desktop and mobile:
 #
-# The visual diff is deliberately NOT run here, and that is a correctness point
-# rather than a convenience one. The baselines in tests/baseline/ are rendered
-# from whatever data the machine capturing them happened to have, and the two
-# environments do not agree:
+#   * axe-core accessibility, blocking on the violations we own; Streamlit's own
+#     DOM defects are allowlisted per-rule in scripts/uxaudit/a11y.py.
+#   * a pixel diff against the reviewed baselines in tests/baseline/, which is
+#     the only thing that catches a clipped axis label, a chart title rendering
+#     as "positories", or a repo name overrunning its grade pill.
 #
-#   * The trend features (KPI deltas, the org sparkline, the movers tables, the
-#     What Changed comparison) exist only when an accumulated history file is
-#     available. That file 404s upstream, so it is present only where a stale
-#     copy is cached locally and absent on every clean checkout, including CI.
-#   * The snapshot itself is fetched live, so upstream data movement changes the
-#     rendering with no code change here.
+# The visual diff used to be excluded here, for a reason that no longer holds.
+# It was unrunnable while the rendering depended on two things CI could not
+# control: the upstream history file (absent — it 404'd, so every trend feature
+# rendered only where a stale local copy existed) and the live snapshot (which
+# moves with upstream data, repainting the page with no code change). Upstream
+# now publishes both CSVs, and the harness pins them along with the clock —
+# tests/fixtures/data/ plus DASHBOARD_FROZEN_NOW, wired up in
+# scripts/uxaudit/app.py. Rendering is now a function of the code alone, so the
+# gate can be honest.
 #
-# A gate that cannot pass teaches people to ignore gates, so `--mode diff` stays
-# a local pre-PR tool (see docs/RUNBOOK.md) until the harness can render against
-# a frozen fixture. Recorded in docs/UX_REVIEW_BACKLOG.md.
+# The baselines are therefore Linux-rendered, because that is what this runner
+# renders. Font rasterisation differs enough between macOS and Linux that a
+# macOS-captured baseline fails here on text alone; see docs/RUNBOOK.md for how
+# to regenerate them through the same container CI uses.
 
 on:
   pull_request:
@@ -74,6 +78,38 @@ jobs:
         with:
           name: ux-failure-screenshots
           path: ci-screenshots/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  visual:
+    name: Visual diff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: Diff every page against tests/baseline/
+        # The app renders the pinned fixture at the pinned instant, so a
+        # difference here is a UI change and nothing else. If this fails on a PR
+        # that did not intend a visual change, read the diff images below before
+        # regenerating anything: a baseline regenerated to silence the gate
+        # deletes the evidence of whatever it was about to catch.
+        run: python scripts/ux_audit.py --mode diff
+      - name: Upload diff images
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          # Both the highlighted diffs and the candidate captures: the diff
+          # shows where the change is, the candidate shows what it now looks
+          # like, and reviewing a visual change needs both.
+          name: ux-visual-diff
+          path: |
+            .ux-audit/diff/
+            .ux-audit/current/
           retention-days: 7
           if-no-files-found: ignore
 

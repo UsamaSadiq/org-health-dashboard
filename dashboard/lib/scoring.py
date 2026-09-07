@@ -6,6 +6,7 @@ from typing import Any
 
 import pandas as pd
 
+from dashboard.lib.clock import now_utc
 from dashboard.lib.config import get_config
 from dashboard.lib.schema import TIMESTAMP_COL, parse_last_push_utc, parse_snapshot_date
 
@@ -77,7 +78,7 @@ def _as_of_datetime(as_of: date | datetime | None) -> datetime:
         return as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)
     if isinstance(as_of, date):
         return datetime.combine(as_of, time.min, tzinfo=timezone.utc)
-    return datetime.now(timezone.utc)
+    return now_utc()
 
 
 def score_row(

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 
 import pandas as pd
 import streamlit as st
 
 from dashboard.data import load_config, load_scored_snapshot
+from dashboard.lib.clock import now_utc
 from dashboard.lib.schema import parse_last_push_utc
 from dashboard.lib.share import share_link
 from dashboard.lib.tiers import TIER_COL, repo_tier
@@ -29,7 +29,7 @@ def render() -> None:
     tiers_cfg = load_config("tiers")
     selected_tier = st.selectbox("Tier filter", ["all", "critical", "important", "standard"])
 
-    now = datetime.now(timezone.utc)
+    now = now_utc()
     rows = []
     for _, row in df.iterrows():
         repo = str(row.get("repo_name", ""))

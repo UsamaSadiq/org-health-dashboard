@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 
 import pandas as pd
 import streamlit as st
 
 from dashboard.data import export_json_payload, load_config, load_scored_snapshot
+from dashboard.lib.clock import now_utc
 from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
 from dashboard.lib.share import share_link
 from dashboard.lib.tiers import tier_counts
@@ -318,7 +318,7 @@ def render() -> None:
     with st.expander(":material/share: Share & export", expanded=False):
         share_link_block(share_link(state), label="Copy link to this view")
 
-        export_name = f"openedx-health-{datetime.now(timezone.utc).date().isoformat()}"
+        export_name = f"openedx-health-{now_utc().date().isoformat()}"
         dl_left, dl_right = st.columns(2)
         dl_left.download_button(
             "Download CSV",
