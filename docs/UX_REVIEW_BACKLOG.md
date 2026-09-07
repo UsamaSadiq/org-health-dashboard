@@ -17,6 +17,32 @@ Priority key: **P0** credibility/broken · **P1** high user value · **P2** poli
 
 ---
 
+## Status note — 2026-09-07
+
+Findings are **kept as originally written**, including the ones that no longer
+reproduce. This is the record of what the review found on 2026-07-24, and
+rewriting history would make it impossible to tell a finding that was fixed from
+one that was never real. Where a finding has since been closed, the row carries a
+`[RESOLVED …]` marker and says what closed it.
+
+Two Wave 0 upstream asks landed while the code sat idle, which closes a cluster
+of P0s that were blocked on someone else's pipeline. As of the `2026-08-31`
+snapshot:
+
+- **WP-0A shipped.** All four activity columns are present, so `score_coverage`
+  reads 100% for every repo rather than the constant 50%. Closes **B1**, **B2**,
+  **B3**, and the data half of **A5**.
+- **WP-0B shipped.** `dashboard_history.csv` is published and carries four
+  snapshots (`2026-08-16` … `2026-08-31`). Closes **A3** and **A4**.
+
+**H9** is closed by this branch rather than by upstream: the harness now renders
+a frozen fixture at a frozen instant, so the gate is reproducible and runs in CI.
+
+Still open from Wave 0: **WP-0C** (`tiers.yaml` is still a four-repo stub),
+**WP-0D** (the 63 missing check descriptions), and the WP-0E/0F/0G decisions.
+
+---
+
 ## A. Broken things a user will hit today
 
 | # | Finding | Pri |
@@ -25,8 +51,8 @@ Priority key: **P0** credibility/broken · **P1** high user value · **P2** poli
 | A0b | **Feature flags provide no access control, only nav shaping.** [VERIFIED] Corollary of A0 and a governance issue in its own right: `feature_flags.yaml` is consulted only in `streamlit_app.py` when building `st.navigation`, never inside the pages themselves. Any file in `pages/` is reachable by its derived URL regardless of its flag. Bounded impact — the SQL page is read-only, sanitised (`sanitize_readonly_query`) and row-capped, over a snapshot that is already public — so this is "a disabled feature is live in production" rather than a data breach. Reframes **C11**: the flag-off pages are not actually hidden today. | **P0** |
 | A1 | **Dark-mode toggle does nothing.** [VERIFIED] `apply_base_style()` sets `data-theme` via a `<script>` inside `st.markdown`. Browsers do not execute scripts injected as innerHTML, so `data-theme` is never set (confirmed: attribute is `null` before and after toggling). The entire `[data-theme="dark"]` CSS block in `theme.py` is dead code, and `.streamlit/config.toml` pins `base = "light"` so the system preference is ignored too. The toggle visibly flips to "on" and nothing happens. | P0 |
 | A2 | **Sidebar Tier filter is a no-op.** [VERIFIED] `FilterState.apply()` filters on a `repo_tier` column. No code creates that column and the upstream CSV does not have it (checked: 111 columns, no `repo_tier`). Selecting Tier = `critical` on Overview silently returns all 171 repos. | P0 |
-| A3 | **History file 404s upstream.** [VERIFIED] `https://raw.githubusercontent.com/openedx/wg-maintenance/main/dashboards/dashboard_history.csv` returns 404 on every load. Locally it falls back to `.cache/dashboard_data/history.csv`, which does not exist on Streamlit Cloud — so in production every trend feature (KPI deltas, org sparkline, per-category sparklines, movers, What Changed) is dead, silently. No user-facing message explains it. | P0 |
-| A4 | **Local history is stale and looks real.** [VERIFIED] The cached history renders sparklines labelled *May 10 – May 31 2026* while the snapshot is *2026-07-24*. A viewer cannot tell that trend lines are two months old. | P0 |
+| A3 | **History file 404s upstream.** [VERIFIED] `https://raw.githubusercontent.com/openedx/wg-maintenance/main/dashboards/dashboard_history.csv` returns 404 on every load. Locally it falls back to `.cache/dashboard_data/history.csv`, which does not exist on Streamlit Cloud — so in production every trend feature (KPI deltas, org sparkline, per-category sparklines, movers, What Changed) is dead, silently. No user-facing message explains it. **[RESOLVED 2026-09-07 — upstream, WP-0B]** The file is published and returns 200; history carries four snapshots. Trend features now render on a clean checkout. | P0 |
+| A4 | **Local history is stale and looks real.** [VERIFIED] The cached history renders sparklines labelled *May 10 – May 31 2026* while the snapshot is *2026-07-24*. A viewer cannot tell that trend lines are two months old. **[RESOLVED 2026-09-07 — upstream, WP-0B]** Superseded by A3: history is live rather than a stale local copy, and the audit renders a pinned fixture whose history matches its snapshot. | P0 |
 | A5 | **Radar chart scores missing metrics as 100.** [VERIFIED] `_metric_radar` uses `per_metric.get(label, 100.0 if label in unavailable else 0.0)`. Four uncollectable metrics are drawn at full radius, so a repo with 5/9 metrics looks near-perfect. Actively misleading. | P0 |
 | A6 | **"Biggest losers" can show gains.** [VERIFIED] `_top_movers` sorts descending then takes `.tail(5)`. If every repo improved, the five smallest improvements are labelled losers. | P1 |
 | A7 | **"What Changed This Week" is not a week.** [VERIFIED] It diffs `history[-1]` vs `history[-2]` — two consecutive snapshots, 6 hours apart on the intended cadence. Title, page name, and bulletin all say "week". | P1 |
@@ -47,9 +73,9 @@ prop is "scoring-transparent", and right now the numbers do not survive scrutiny
 
 | # | Finding | Pri |
 |---|---|---|
-| B1 | **Half the composite score is fabricated.** [VERIFIED] The snapshot has none of `github.median_pr_response_seconds`, `github.pr_closure_ratio_90d`, `github.release_count_12mo`, `github.contributor_count_90d`. Those four metrics carry 0.15+0.15+0.10+0.10 = **50% of total weight** and every repo gets `default_when_missing: 50`. That is why "Score coverage" reads exactly 50%. So "Org Health 70.3 · Grade B" is 50% real signal and 50% a constant. The gauge presents it with no caveat. | P0 |
-| B2 | **"Score coverage 50%" is a fourth-position KPI tile.** The most important caveat on the page is the least prominent number on it. Consider putting coverage *on* the gauge (e.g. a hatched/ghosted arc segment for the uncomputable half) or a persistent banner. | P0 |
-| B3 | **"Activity 100.0" on Repo Detail is meaningless.** All five activity metrics but one are unavailable, so Activity is dominated by defaults. Showing a hard `100.0` in a KPI tile next to a real `Structural 90.5` implies equal confidence. Suggest greying/annotating any sub-score whose coverage is below a threshold. | P0 |
+| B1 | **Half the composite score is fabricated.** [VERIFIED] The snapshot has none of `github.median_pr_response_seconds`, `github.pr_closure_ratio_90d`, `github.release_count_12mo`, `github.contributor_count_90d`. Those four metrics carry 0.15+0.15+0.10+0.10 = **50% of total weight** and every repo gets `default_when_missing: 50`. That is why "Score coverage" reads exactly 50%. So "Org Health 70.3 · Grade B" is 50% real signal and 50% a constant. The gauge presents it with no caveat. **[RESOLVED 2026-09-07 — upstream, WP-0A]** All four columns are present in the `2026-08-31` snapshot. `score_coverage` is 1.0 for every repo; measured weight averages 0.90, the remainder being per-repo blanks rather than absent columns. | P0 |
+| B2 | **"Score coverage 50%" is a fourth-position KPI tile.** The most important caveat on the page is the least prominent number on it. Consider putting coverage *on* the gauge (e.g. a hatched/ghosted arc segment for the uncomputable half) or a persistent banner. **[RESOLVED 2026-09-07 — upstream, WP-0A]** Moot: coverage is no longer the caveat it was, because it is no longer 50%. | P0 |
+| B3 | **"Activity 100.0" on Repo Detail is meaningless.** All five activity metrics but one are unavailable, so Activity is dominated by defaults. Showing a hard `100.0` in a KPI tile next to a real `Structural 90.5` implies equal confidence. Suggest greying/annotating any sub-score whose coverage is below a threshold. **[RESOLVED 2026-09-07 — upstream, WP-0A]** Activity is now computed from four measured metrics rather than dominated by defaults. | P0 |
 | B4 | **Only 3 of 76 collected checks feed the score.** [VERIFIED] The Checks Catalog states this plainly as a metric tile ("Checks collected 76 / Feeding the score 3"). Users will reasonably ask what the other 73 are for. Either the framing needs work ("informational vs scored") or the scoring needs to widen. | P0 |
 | B5 | **63 of 76 checks have no description.** [VERIFIED] Displayed as a "Missing descriptions 63" tile — an internal QA counter shipped to the public. Fill the descriptions, or move the counter to a maintainer-only view. | P1 |
 | B6 | **No "how is this scored" explainer anywhere in-app.** There is a Checks Catalog but no page that shows the 9 metrics, their weights, the letter-grade bands, and the `default_when_missing: 50` policy. A "Scoring" page (or a modal from the gauge) would answer the first question every new viewer has. | P1 |
@@ -153,6 +179,7 @@ prop is "scoring-transparent", and right now the numbers do not survive scrutiny
 | D43 | **The bulletin is shown as syntax-highlighted markdown source** — headers render in red monospace. It looks like an error. Show the rendered bulletin with a "copy source" toggle. | P2 |
 | D44 | **No score/grade change reporting** — only check-level flips. No "repos that changed grade", no "repos that dropped a tier", no org-average delta. This is the page WG leads open first. | P1 |
 | D45 | [IDEA] **Narrative summary** — 2–3 auto-written sentences ("Org average fell 1.2 points. 3 repos dropped to D or below. `readme.security` regressed across 14 repos.") Copy-pasteable into a meeting agenda. | P1 |
+| D54 | **"Newly failing checks" counts numeric columns as failed checks.** [VERIFIED 2026-09-07, new] `_looks_like_check_column` in `dashboard/lib/trends.py` accepts any dotted column that is not `github.*` or `language_bytes.*`, which sweeps in count columns like `dependencies.count`, `dependencies.pypi.count` and `dependencies.js.dev.count`. `_is_failing` then reads `0` as failing, so a repo whose dependency count drops to zero is reported as a newly failing check named "dependencies.count". On the `2026-08-31` fixture, 3 of the first 3 reported failures are this artefact. Latent until now — with no history file, this code never ran against real data. The page, the KPI and the weekly bulletin all inherit it. **Fix:** classify check columns explicitly (boolean dtype, or an allowlist derived from `check_descriptions.yaml`) rather than by string shape. | **P0** for WP-12 |
 
 ### D.6 Checks Catalog
 
@@ -218,7 +245,7 @@ Axe-core 4.10 scan of Overview, Repo Detail, Failing Checks, Needing Attention.
 | F10 | **No documented keyboard path** through the 43 check expanders on Repo Detail or the 76 on the Catalog. Tab-through is technically possible but punishing. Search (D46) would fix this too. | P2 |
 | F11 | **`unsafe_allow_html` is used ~15 times.** `render_repo_pill_list` escapes correctly; verify every other site does. Repo names come from upstream CSV, which is a (low) injection surface. | P2 |
 | F12 | [IDEA] Publish an **accessibility statement**, given the audience includes public-sector Open edX operators with procurement requirements. | P3 |
-| H9 | **The visual-diff baselines are not reproducible across environments, so the gate cannot run in CI.** [VERIFIED] `tests/baseline/` records whatever data the capturing machine had. Two independent sources of divergence: the trend features (KPI deltas, org sparkline, movers tables, the What Changed comparison) render only when an accumulated history file is available, and that file 404s upstream — so it exists only where a stale copy is cached locally and is absent on every clean checkout including CI; and the snapshot itself is fetched live, so upstream data movement changes the rendering with no code change. Found when the CI diff job failed on a PR: the committed baselines had been captured with a two-month-old local `history.csv` that no fresh checkout can reproduce. `--mode diff` is therefore a local pre-PR tool only, and the CI job was removed rather than left permanently red. **Real fix:** render against a frozen data fixture, at which point the gate can be strict and run in CI. | P1 |
+| H9 | **The visual-diff baselines are not reproducible across environments, so the gate cannot run in CI.** [VERIFIED] `tests/baseline/` records whatever data the capturing machine had. Two independent sources of divergence: the trend features (KPI deltas, org sparkline, movers tables, the What Changed comparison) render only when an accumulated history file is available, and that file 404s upstream — so it exists only where a stale copy is cached locally and is absent on every clean checkout including CI; and the snapshot itself is fetched live, so upstream data movement changes the rendering with no code change. Found when the CI diff job failed on a PR: the committed baselines had been captured with a two-month-old local `history.csv` that no fresh checkout can reproduce. `--mode diff` is therefore a local pre-PR tool only, and the CI job was removed rather than left permanently red. **Real fix:** render against a frozen data fixture, at which point the gate can be strict and run in CI. **[RESOLVED 2026-09-07 — this branch]** The harness pins the data (`tests/fixtures/data/`), the clock (`DASHBOARD_FROZEN_NOW`) and the hash seed, and renders in the same container CI uses. A fresh capture reproduces the baselines bit-identically, and `--mode diff` runs as a blocking CI job. | P1 |
 | F13 | **`share_link_block()` produces a keyboard-inaccessible scroll region.** [VERIFIED, serious] `dashboard/ui/theme.py:532` renders the share URL via `st.code(url, language="text")`. At 390px the resulting `<pre>` overflows horizontally with no `tabindex`, so a keyboard-only user cannot scroll it and cannot read the URL. axe rule `scrollable-region-focusable`. Fires on exactly the four pages whose share URL carries query params (`repo_detail?repo=`, `needing_attention?tier=`, `what_changed`, `ownership_views?coverage=`) and not on `failing_checks`, whose URL is short enough not to overflow — content-length dependent, which confirms the call site. Ours to fix; D17 already replaces this widget, so fold it in there. **Only surfaced because the audit scans mobile** — a desktop-only scan misses it entirely. | P1 |
 
 ---
@@ -349,8 +376,8 @@ writing any code.
 
 | Items | Why first | Gates |
 |---|---|---|
-| **L1** Collect the 4 missing activity metrics upstream | The single highest-value change in the whole document. Fixes half the composite score at the source. Pipeline work, not dashboard work. | B1, B3, A5, D9, D15 |
-| **A3** Publish `dashboard_history.csv` upstream (currently 404) | Until this exists, every trend feature is dead in production no matter what we build. | A4, D5, D16, D25, D40–D45, all KPI deltas |
+| ~~**L1** Collect the 4 missing activity metrics upstream~~ **— done 2026-08-31** | The single highest-value change in the whole document. Fixes half the composite score at the source. Pipeline work, not dashboard work. | B1, B3, A5, D9, D15 |
+| ~~**A3** Publish `dashboard_history.csv` upstream~~ **— done 2026-08-31** | Until this exists, every trend feature is dead in production no matter what we build. | A4, D5, D16, D25, D40–D45, all KPI deltas |
 | **D34** Populate `tiers.yaml` beyond 4 of 171 repos | Curation decision for the WG. Needing Attention cannot work without it. | D32, D33, D37, A2 |
 | **B5** Write the 63 missing check descriptions | Pure authoring grind, parallelisable, blocks four separate UI improvements. | D18, D47, D49, I10 |
 | **B4** Decide: widen scoring beyond 3 of 76 checks, or reframe "informational vs scored" | Architectural decision with a config consequence. Cheap to decide, expensive to defer. | D49, B6 |
