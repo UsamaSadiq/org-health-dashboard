@@ -30,6 +30,9 @@ itself, so there is no server to launch first and nothing to clean up after.
 Step 2 downloads the browser binary and is not optional. Without it every mode
 fails at browser launch.
 
+For `--mode diff` and `--mode baseline` you need Docker instead of these two
+steps; see "Baselines are Linux-rendered" below.
+
 ### Modes
 
 Run all four from the repo root:
@@ -43,8 +46,11 @@ Run all four from the repo root:
   reference PNGs in `tests/baseline/<viewport>/<page>.png`.
 - `python scripts/ux_audit.py --mode diff` compares a fresh capture against
   those baselines, writes diff images to `.ux-audit/diff/`, and exits 1 on a
-  regression. This is the gate to run before opening a PR that touches anything
-  visual.
+  regression. CI runs this as a blocking gate.
+
+Run the last two through
+[scripts/ux_audit_container.sh](../scripts/ux_audit_container.sh) rather than
+directly — see "Baselines are Linux-rendered" below.
 
 Everything under `.ux-audit/` is transient and gitignored. Everything under
 `tests/baseline/` is tracked.
@@ -64,45 +70,101 @@ Never regenerate baselines to turn a red gate green. That converts a caught
 regression into a committed one, and the commit will read as if someone approved
 it. Investigate first, always.
 
-### Known baseline churn
+### What makes the diff reproducible
 
-The dashboard renders the snapshot date and a relative freshness label
-("Stale · 3d ago", from [dashboard/ui/banners.py](../dashboard/ui/banners.py)).
-Both change as the data ages, so a checkout that sat overnight can show diffs in
-those regions with no code change behind them. Expect that noise, confirm it is
-confined to the date and the freshness chip, and move on. It is not a
-regression, and it is not worth chasing.
+Rendering is very nearly a function of the code alone. Five inputs that would
+otherwise move on their own are pinned:
 
-The bulletin's "Generated:" timestamp moves every minute, which would fail the
-gate on every single run, so it is masked. Masks are declared in
-[scripts/uxaudit/pages.py](../scripts/uxaudit/pages.py) and kept deliberately
-narrow: a mask hides real regressions inside it.
+| Input | Pinned by | Without it |
+|---|---|---|
+| The two upstream CSVs | `tests/fixtures/data/`, via `DASHBOARD_DATA_FIXTURE` | Upstream churn — a repo added, a check flipping, a score moving a tenth — repaints the page with no code change |
+| The clock | `DASHBOARD_FROZEN_NOW`, via [dashboard/lib/clock.py](../dashboard/lib/clock.py) | The freshness chip ("9d ago"), the staleness banner and the Needing Attention rules re-render every day |
+| Set iteration order | `PYTHONHASHSEED=0` | Any page building a list from a set shuffles between runs |
+| The build's commit | `GITHUB_SHA`, overwritten by the harness | The bulletin's "Commit: &lt;sha&gt;" provenance line changes on every commit, and is absent outside CI |
+| Tie order in every ranking | [dashboard/lib/ordering.py](../dashboard/lib/ordering.py) | Repos on equal scores permute between machines, so "Top 5" is a different five |
 
-### The diff runs locally, not in CI
+The first four are environment variables, and
+[scripts/uxaudit/app.py](../scripts/uxaudit/app.py) sets all four for the
+Streamlit child process, so every mode gets them without you doing anything. The
+fifth is pinned in application code rather than by the harness, because a
+ranking that permutes between machines is a bug for readers too, not just for the
+gate.
 
-`--mode diff` is a pre-PR tool, and the CI workflow deliberately does not run it.
-The baselines record whatever data the capturing machine had, and two things make
-that non-reproducible:
+To render live data instead — reproducing a bug that only appears on current
+upstream data — set `DASHBOARD_DATA_FIXTURE=` to an explicit empty value. A
+baseline captured that way is not comparable with the committed ones.
 
-1. The trend features (KPI deltas, the org sparkline, the movers tables, the What
-   Changed comparison) render only when an accumulated history file is available.
-   That file currently 404s upstream, so it exists only where a stale copy sits in
-   a local `.cache/`, and is absent on every clean checkout.
-2. The snapshot is fetched live, so upstream data movement changes the rendering
-   with no code change here.
+**"Very nearly", not "entirely".** One input is still outside our control:
+`dashboard/ui/theme.py` `@import`s Inter from Google Fonts, so every glyph is
+fetched at capture time. If that fetch fails the page renders in the `system-ui`
+fallback, every text run reflows, and all 14 images differ. The capture now
+aborts with an explicit message rather than writing fallback-rendered PNGs, so
+this costs a rerun rather than a bad baseline — but a runner with no egress to
+`fonts.googleapis.com` cannot run the gate. Vendoring the font is backlog H10.
 
-This was found the hard way: baselines captured with a two-month-old local
-`history.csv` failed CI immediately, because the runner had no history and so
-rendered none of those features. A gate that cannot pass teaches people to ignore
-gates.
+Nothing is masked, and that is the goal rather than a coincidence. The bulletin's
+"Generated:" timestamp used to need a mask because it read the wall clock at
+render time; pinning the clock removed the need. A mask is a blind spot — it
+hides any regression inside it, and its coordinates rot silently against layout
+change — so when something renders non-deterministically, pin the value rather
+than mask the pixels. `MASKS` in
+[scripts/uxaudit/pages.py](../scripts/uxaudit/pages.py) is where an entry would
+go if one were ever genuinely outside our control.
 
-So: run `--mode diff` yourself before opening a PR, and read the report. The real
-fix is to render against a frozen data fixture, at which point the gate becomes
-reproducible and can be strict in CI. Tracked as H9 in
-[docs/UX_REVIEW_BACKLOG.md](./UX_REVIEW_BACKLOG.md).
+### Baselines are Linux-rendered — use the container
 
-If you regenerate baselines, do it from a checkout with no `.cache/` directory,
-so what you commit is what a clean environment renders.
+Text rasterisation differs between operating systems by far more than the gate's
+tolerance. A baseline captured on macOS and diffed on a Linux runner reports
+1.2–10.6% of pixels changed, with whole-page bounding boxes and page heights
+shifting 25px from line-wrap differences. No tolerance absorbs that while still
+catching a clipped axis label.
+
+So there is one reference environment — the pinned
+`mcr.microsoft.com/playwright/python` image — and both CI and contributors render
+in it:
+
+```bash
+scripts/ux_audit_container.sh --mode diff
+scripts/ux_audit_container.sh --mode baseline
+```
+
+That script takes the same arguments as `ux_audit.py` and needs only Docker
+running. It installs the pinned dependencies on every run — deliberately, since
+that is what keeps it identical to the CI step rather than merely similar — but a
+named volume caches pip's downloads, so after the first run the install is a
+local unpack of a few seconds rather than a re-download.
+
+Running `ux_audit.py` directly on your machine is still the right thing for
+`--mode a11y` and `--mode screenshots` — neither compares against a committed
+baseline, so host rendering is fine. Only `--mode diff` and `--mode baseline`
+need the container.
+
+The image is pinned by **digest**, not by tag. A tag is a mutable pointer — this
+one is rebuilt for OS security patches, and a freetype or fontconfig change moves
+text rasterisation — so CI (which pulls fresh every job) and a contributor (whose
+Docker reuses a cached layer) would silently drift onto different images and
+reintroduce the cross-machine font failure the container exists to prevent.
+
+The digest appears in three places that must agree: the `container:` key in
+`.github/workflows/ux-audit.yml`, `IMAGE` in
+[scripts/ux_audit_container.sh](../scripts/ux_audit_container.sh), and the
+`playwright` pin in [requirements-dev.txt](../requirements-dev.txt). To move it:
+
+```bash
+docker pull mcr.microsoft.com/playwright/python:<new tag>
+docker image inspect mcr.microsoft.com/playwright/python:<new tag> \
+  --format '{{index .RepoDigests 0}}'
+```
+
+Update all three, regenerate the baselines in the same commit, and say in the
+message that the image moved — otherwise the baseline churn has no explanation.
+
+### Refreshing the data fixture
+
+Rarely, and never to make a red gate green. See
+[tests/fixtures/data/README.md](../tests/fixtures/data/README.md) for the
+procedure and for why a fixture refresh belongs in its own commit, separate from
+any code change.
 
 ### After a Streamlit upgrade
 
@@ -128,10 +190,9 @@ threshold set high enough to tolerate Streamlit's own DOM would also silence our
 serious `color-contrast` failures, which is exactly what the gate exists to
 catch. Adding a rule to the allowlist is a deliberate, reviewable act.
 
-**This gate is expected to fail today.** There are real live `color-contrast`
-and `heading-order` violations in our own CSS and markup. They are fixed by WP-8
-and WP-9 in [UX_REMEDIATION_PLAN.md](UX_REMEDIATION_PLAN.md); until then a
-non-zero exit from `--mode a11y` is the accurate answer, not a broken harness.
+The gate passes as of WP-9, which fixed the `color-contrast` and `heading-order`
+violations in our own CSS and markup. A non-zero exit now means a real
+regression, not a known-bad baseline.
 
 ### Licence note
 

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, timezone
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from dashboard.lib.clock import now_utc
 from dashboard.lib.schema import LAST_PUSH_COL, parse_last_push_utc
 from dashboard.ui.theme import palette
 
@@ -122,7 +123,7 @@ def _gauge_figure(avg: float, measured_weight: float | None = None) -> go.Figure
 def _count_stale(df: pd.DataFrame, stale_hours: int) -> int:
     if LAST_PUSH_COL not in df.columns:
         return 0
-    threshold = datetime.now(timezone.utc).timestamp() - (stale_hours * 3600)
+    threshold = now_utc().timestamp() - (stale_hours * 3600)
     count = 0
     for value in df[LAST_PUSH_COL]:
         pushed = parse_last_push_utc(value)

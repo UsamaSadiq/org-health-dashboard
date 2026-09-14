@@ -6,6 +6,22 @@ Backlog IDs (`A1`, `D32`, …) are used throughout; this document does not resta
 **Status:** proposed, not approved. Effort figures are rough dev-days for one
 engineer familiar with the codebase, and are for relative sizing only.
 
+### Progress — 2026-09-07
+
+| Wave | State |
+|---|---|
+| 0 | **WP-0A and WP-0B delivered upstream.** Both landed in the `openedx/wg-maintenance` pipeline between the `2026-08-16` and `2026-08-31` snapshots. WP-0C, WP-0D and the 0E/0F/0G decisions are still open. |
+| 1 | Shipped (WP-1, WP-2A, WP-2, WP-3, WP-4, WP-5, WP-6) — merged in PR #1. |
+| 2 | Shipped (WP-7, WP-8, WP-9) — merged in PR #1. |
+| 3 | Shipped (WP-10, WP-11) — merged in PR #1. |
+| 4–8 | Not started. Now unblocked: WP-12 depended on WP-0B, and WP-13 on WP-0C (still a stub, so it ships without tier curation per WP-3's note). |
+
+Delivered since, outside the numbered packages: the visual gate now runs in CI,
+which closes backlog item H9. It required pinning the two things the rendering
+depended on besides the code — the upstream data (`tests/fixtures/data/`) and the
+clock (`dashboard/lib/clock.py`) — and standardising on one container so
+baselines are reproducible off the runner.
+
 ---
 
 ## 1. Strategy
@@ -60,6 +76,8 @@ each gates later work. **Owner** is who must act, not who files the request.
 ### WP-0A · Collect the four missing activity metrics
 **Closes** L1 · **Unblocks** B1, B3, A5, D9, D15 · **Owner** pipeline maintainers · **Effort** n/a (external)
 
+**Delivered 2026-08-31 (upstream).** All four columns are present and populated; `score_coverage` reads 100% for every repo, which was the stated acceptance criterion. Per-repo blanks remain in `median_pr_response_seconds` (80% filled) and `pr_closure_ratio_90d` (84%), handled by the WP-4 confidence layer rather than by a default.
+
 The snapshot must gain four columns. Exact names are already contracted by
 `dashboard/config/openedx/scoring.yaml`:
 
@@ -83,6 +101,8 @@ containing this table, the thresholds from `scoring.yaml`, and the statement tha
 
 ### WP-0B · Publish the history file
 **Closes** A3 · **Unblocks** A4, D5, D16, D25, D40–D45, all KPI deltas · **Owner** pipeline maintainers · **Effort** n/a (external)
+
+**Delivered 2026-08-31 (upstream).** `dashboards/dashboard_history.csv` returns 200 and carries four snapshots (`2026-08-16`, `2026-08-20`, `2026-08-25`, `2026-08-31`), 680 rows over 83 columns. Note the history file is narrower than the snapshot (83 vs 119 columns) and its repo count drifts (171 → 168); anything joining the two must tolerate both.
 
 `https://raw.githubusercontent.com/openedx/wg-maintenance/main/dashboards/dashboard_history.csv`
 returns 404 on every load. `dashboard/lib/trends.py` already expects the format:
