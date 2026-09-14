@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 
 import pandas as pd
 import streamlit as st
 
 from dashboard.data import export_json_payload, load_config, load_scored_snapshot
+from dashboard.lib.clock import now_utc
+from dashboard.lib.ordering import bottom, rank, top
 from dashboard.lib.schema import TIMESTAMP_COL, parse_snapshot_date
 from dashboard.lib.share import share_link
 from dashboard.lib.tiers import tier_counts
@@ -65,7 +66,7 @@ def _top_failing(frame: pd.DataFrame, limit: int = 10) -> pd.DataFrame:
             rows.append({"check": col, "failing": count})
     if not rows:
         return pd.DataFrame()
-    return pd.DataFrame(rows).sort_values("failing", ascending=False).head(limit)
+    return top(pd.DataFrame(rows), "failing", limit, tiebreak="check")
 
 
 def _baseline_frame() -> pd.DataFrame | None:
@@ -114,7 +115,7 @@ def _top_movers(frame: pd.DataFrame) -> pd.DataFrame:
     if merged.empty:
         return pd.DataFrame()
     merged["delta"] = (merged["score_composite"] - merged["baseline_score"]).round(2)
-    return merged.sort_values("delta", ascending=False)
+    return rank(merged, "delta", ascending=False)
 
 
 def render() -> None:
@@ -242,8 +243,10 @@ def render() -> None:
             st.caption("Drill down on individual checks in **Failing Checks**.")
 
     # ---------------------------------------------- 3. ranked tables + movers
-    ranked = working[["repo_name", "score_composite", "score_letter"]].sort_values(
-        "score_composite", ascending=False
+    ranked = rank(
+        working[["repo_name", "score_composite", "score_letter"]],
+        "score_composite",
+        ascending=False,
     )
 
     st.header(":material/leaderboard: Highlights")
@@ -255,9 +258,14 @@ def render() -> None:
         (str(r.repo_name), float(r.score_composite), str(r.score_letter))
         for r in ranked.head(5).itertuples(index=False)
     ]
+    # bottom(), not ranked.tail(5).iloc[::-1]. Reversing the ranked frame also
+    # reverses its alphabetical tiebreak, so a tie straddling the cut selected
+    # the alphabetically *last* of the tied repos: with two repos on 36.67, the
+    # list showed openedx/training-courses where every other bottom-ranking path
+    # shows openedx/olxcleaner. Same scores, different answer per call site.
     bottom_rows = [
         (str(r.repo_name), float(r.score_composite), str(r.score_letter))
-        for r in ranked.tail(5).iloc[::-1].itertuples(index=False)
+        for r in bottom(working, "score_composite", 5).itertuples(index=False)
     ]
     hi_left, hi_right = st.columns(2)
     with hi_left:
@@ -278,11 +286,11 @@ def render() -> None:
             if span
             else "available history"
         )
-        gainers = movers[movers["delta"] > 0].nlargest(5, "delta")
-        # nsmallest with a negative filter, not tail(): sorting descending and
+        gainers = top(movers[movers["delta"] > 0], "delta", 5)
+        # bottom() over a negative filter, not tail(): sorting descending and
         # taking the tail labels the five smallest *gains* as losses whenever
         # every repository improved.
-        losers = movers[movers["delta"] < 0].nsmallest(5, "delta")
+        losers = bottom(movers[movers["delta"] < 0], "delta", 5)
 
         mv_left, mv_right = st.columns(2)
         with mv_left:
@@ -318,7 +326,7 @@ def render() -> None:
     with st.expander(":material/share: Share & export", expanded=False):
         share_link_block(share_link(state), label="Copy link to this view")
 
-        export_name = f"openedx-health-{datetime.now(timezone.utc).date().isoformat()}"
+        export_name = f"openedx-health-{now_utc().date().isoformat()}"
         dl_left, dl_right = st.columns(2)
         dl_left.download_button(
             "Download CSV",

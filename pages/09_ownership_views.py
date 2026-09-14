@@ -6,6 +6,7 @@ import streamlit as st
 from dashboard.lib.config import get_feature_flags
 from dashboard.data import load_my_repos, load_scored_snapshot
 from dashboard.lib.scoring import calculate_scores
+from dashboard.lib.ordering import rank
 from dashboard.lib.share import share_link
 from dashboard.ui import empty_state, page_init, repo_table, share_link_block
 
@@ -57,7 +58,7 @@ def _group_summary(df: pd.DataFrame, column: str) -> pd.DataFrame:
             avg_score=("score_composite", "mean"),
             d_or_f=("score_letter", lambda series: int(series.isin(["D", "F"]).sum())),
         )
-        .sort_values(["repo_count", "avg_score"], ascending=[False, False])
+        .pipe(rank, ["repo_count", "avg_score"], ascending=[False, False], tiebreak=column)
     )
     summary["avg_score"] = summary["avg_score"].round(2)
     return summary
@@ -155,7 +156,7 @@ def render() -> None:
                     )
                 else:
                     repo_table(
-                        mine.sort_values("score_composite", ascending=False),
+                        rank(mine, "score_composite", ascending=False),
                         columns=["repo_name", "score_composite", "score_letter"],
                         link_to_detail=True,
                         use_progress=True,

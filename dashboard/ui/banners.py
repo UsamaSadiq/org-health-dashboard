@@ -27,10 +27,12 @@ for how long? is that expected?", so the body should answer at least one of thos
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import Callable, Literal
 
 import streamlit as st
+
+from dashboard.lib.clock import now_utc
 
 EmptyStateKind = Literal["good", "info", "warn", "error"]
 
@@ -92,7 +94,7 @@ def render_freshness_banner(snapshot_date: date | None, stale_hours: int, critic
         )
         return
 
-    now = datetime.now(timezone.utc).date()
+    now = now_utc().date()
     age_hours = max(0, (now - snapshot_date).days * 24)
     # Bare duration, not _format_age()'s relative phrasing: that returns "7d ago",
     # which reads as "Data is 7d ago old".
@@ -130,7 +132,7 @@ def freshness_chip_html(snapshot_date: date | None, stale_hours: int, critical_h
             '<span class="freshness-dot"></span>No snapshot</div>'
         )
 
-    now = datetime.now(timezone.utc).date()
+    now = now_utc().date()
     age_hours = max(0, (now - snapshot_date).days * 24)
     age_label = _format_age(age_hours)
 

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 
 import pandas as pd
+
+from dashboard.lib.clock import now_utc
 
 
 def generate_weekly_bulletin(
@@ -12,7 +13,7 @@ def generate_weekly_bulletin(
     commit_sha: str,
 ) -> str:
     """Create markdown-ready bulletin for Slack or forum updates."""
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = now_utc().strftime("%Y-%m-%d %H:%M UTC")
 
     lines = [
         "## Open edX Repo Health Weekly Bulletin",

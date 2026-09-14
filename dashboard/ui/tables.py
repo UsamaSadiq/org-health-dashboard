@@ -34,6 +34,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from dashboard.lib.ordering import rank
 from dashboard.lib.share import share_link
 
 # Column vocabulary. Keys are dataframe column names; values are display labels.
@@ -193,6 +194,8 @@ def repo_grade_table(df: pd.DataFrame) -> pd.DataFrame:
     Pre-existing helper, kept because callers use it for the projection itself
     rather than for rendering.
     """
-    return df[["repo_name", "score_composite", "score_letter"]].sort_values(
-        "score_composite", ascending=False
+    return rank(
+        df[["repo_name", "score_composite", "score_letter"]],
+        "score_composite",
+        ascending=False,
     )
