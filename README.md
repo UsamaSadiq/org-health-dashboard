@@ -4,6 +4,8 @@
 
 The Open edX Repository Health Dashboard is a community tool that provides visualization and analytical capabilities for Open edX repository health metrics. This implementation follows the [v3 PRD document](docs/PRD.md). The project is licensed under AGPL-3.0-or-later with CLA enforced via cla-assistant.
 
+**Live dashboard:** https://openedx-health-dashboard.streamlit.app/
+
 ## Key Features
 - 9-metric scoring system with CHAOSS and OpenSSF Scorecard integration
 - Historical trend analysis and delta detection
