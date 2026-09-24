@@ -17,7 +17,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pandas as pd
 import pytest
+
+from dashboard.lib.precomputed import scored_history
+from dashboard.lib.trends import Snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGES_DIR = ROOT / "pages"
@@ -127,11 +131,14 @@ def test_scored_history_does_not_mutate_the_cached_raw_frames() -> None:
     Scoring the raw snapshots in place would add score_* columns to the entry that
     every unscored caller shares.
     """
-    source = (ROOT / "dashboard" / "data.py").read_text(encoding="utf-8")
-    assert "Snapshot(timestamp=" in source, (
-        "load_scored_history should build new Snapshot objects rather than "
-        "assigning into the cached ones"
-    )
+    raw = pd.read_csv(ROOT / "tests" / "fixtures" / "data" / "dashboard_main.csv").head(3)
+    cached = [Snapshot(timestamp=pd.Timestamp("2026-09-01").date(), df=raw)]
+    columns_before = list(raw.columns)
+
+    scored = scored_history(cached, None)
+
+    assert scored[0] is not cached[0]
+    assert list(cached[0].df.columns) == columns_before
 
 
 def test_repo_detail_does_not_cache_history_per_repository() -> None:
