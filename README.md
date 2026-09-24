@@ -13,6 +13,11 @@ The Open edX Repository Health Dashboard is a community tool that provides visua
 - Configurable remediation snippets and auto-PR generation
 - Org-specific configuration and visualization rules
 
+## Scoring and independence
+How scores are computed (metrics, weights, thresholds, grade bands, missing-data policy) is shown on the dashboard's **How Scoring Works** page, generated from [scoring.yaml](dashboard/config/openedx/scoring.yaml).
+
+Payment never buys ranking, visibility, score changes, early access to public results, or removal of a public result. Every check, weight, threshold and score for public repositories stays open and reproducible.
+
 ## Contributing
 Please review [CLA.md](CLA.md) before contributing.
 

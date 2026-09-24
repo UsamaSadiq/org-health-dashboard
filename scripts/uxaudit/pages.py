@@ -17,7 +17,7 @@ per-page values below are measured, not guessed: Overview and Repo Detail pay
 for charts plus the history load, Failing Checks and the Catalog build large
 tables, the rest are cheap.
 
-Seven pages are listed. ``pages/07_sql.py``, ``08_badges.py`` and
+Eight pages are listed. ``pages/07_sql.py``, ``08_badges.py`` and
 ``10_cards.py`` are feature-flagged off by default and render a "not enabled"
 stub, and ``99_healthz.py`` is a plain-text liveness endpoint, so none belong in
 a visual baseline.
@@ -63,6 +63,7 @@ PAGES: list[PageSpec] = [
     PageSpec(name="what_changed", path="what_changed", settle_seconds=3.0),
     PageSpec(name="ownership_views", path="ownership_views", settle_seconds=3.0),
     PageSpec(name="glossary", path="glossary", settle_seconds=4.0),
+    PageSpec(name="scoring", path="scoring", settle_seconds=3.0),
 ]
 
 # 1440x1000 is a typical laptop browser; 390x844 is an iPhone 14 logical
