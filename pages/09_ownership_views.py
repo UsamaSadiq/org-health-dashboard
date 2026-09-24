@@ -92,8 +92,9 @@ def _render_at_risk(df: pd.DataFrame) -> None:
     risky = at_risk_repos(df, baseline, now=now_utc(), rule=rule)
 
     st.caption(
-        "Repositories owned by `openedx-unmaintained`, a single person, or nobody, "
-        "that also show weak activity, no recent push, or a falling score. Ownership "
+        "Repositories waiting for a maintainer (`openedx-unmaintained`), owned by a "
+        "single person, or with no owner, that also show weak activity, no recent "
+        "push, or a falling score. Deprecated and archived repositories are left out. Ownership "
         "data starts with the 2026-09-24 snapshot, so score changes are shown for "
         "repos with thin ownership today, not changes in who owns them."
     )
@@ -116,7 +117,6 @@ def _render_at_risk(df: pd.DataFrame) -> None:
         )
         return
 
-    risky = rank(risky, ["owner_status", "score_composite"], ascending=[False, True], tiebreak="repo_name")
     repo_table(
         risky,
         columns=[

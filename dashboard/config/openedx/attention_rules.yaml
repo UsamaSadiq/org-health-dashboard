@@ -19,6 +19,7 @@ rules:
     weak_activity_below: 40
     stale_push_days: 180
     score_drop_points: 5
+    excluded_lifecycles: ["deprecated"]
     catalog_url_template: "https://backstage.openedx.org/catalog/default/component/{name}"
   legacy_ci_signal:
     enabled: true
