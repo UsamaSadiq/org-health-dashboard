@@ -18,11 +18,13 @@ UPGRADE_COLUMNS = {
     "last_merged": st.column_config.TextColumn("Last requirements PR merged"),
     "workflow_url": st.column_config.LinkColumn("Workflow", display_text="Runs"),
 }
-WAVE_COLUMNS = {
-    "status_label": st.column_config.TextColumn("Status", width="small"),
-    "pr_age_days": st.column_config.NumberColumn("PR age (days)"),
-    "pr_url": st.column_config.LinkColumn("Migration PR", display_text="Open"),
-    "gaps": st.column_config.TextColumn("Still to do"),
+OPEN_PR_COLUMNS = {
+    "pr_age_days": st.column_config.NumberColumn("Open for (days)", width="small"),
+    "pr_url": st.column_config.LinkColumn("Migration PR", display_text=r"/pull/(\d+)$"),
+    "pr_title": st.column_config.TextColumn("PR title", width="large"),
+}
+NOT_STARTED_COLUMNS = {
+    "gaps": st.column_config.TextColumn("Still to do", width="large"),
 }
 REDUNDANT_COLUMNS = {
     "bot_pr_url": st.column_config.LinkColumn("Bot PR", display_text=r"/pull/(\d+)$"),
@@ -95,16 +97,28 @@ def _render_wave(wave_id: str, wave: dict) -> None:
         column.metric(WAVE_LABELS[status], summary.get(status, 0))
     st.caption(f"Done means: {_done_rule(wave)}. Collected {_generated(payload)}.")
     frame = pd.DataFrame(payload["records"])
-    frame = frame[frame["status"] != "not_applicable"]
-    frame = frame.assign(
-        status_label=frame["status"].map(WAVE_LABELS),
-        gaps=[_gaps(missing, leftover) for missing, leftover in zip(frame["missing"], frame["leftover"])],
+
+    st.subheader("Open migration PRs, oldest first")
+    open_prs = frame[frame["status"] == "pr_open"].sort_values("pr_age_days", ascending=False)
+    repo_table(
+        open_prs,
+        columns=["repo_name", "pr_age_days", "pr_url", "pr_title"],
+        extra_config=OPEN_PR_COLUMNS,
+        height=380,
+        empty_message="No migration PRs open.",
+    )
+
+    st.subheader("Not started")
+    not_started = frame[frame["status"] == "not_started"]
+    not_started = not_started.assign(
+        gaps=[_gaps(missing, leftover) for missing, leftover in zip(not_started["missing"], not_started["leftover"])]
     )
     repo_table(
-        frame,
-        columns=["repo_name", "status_label", "pr_age_days", "pr_url", "gaps"],
-        extra_config=WAVE_COLUMNS,
-        height=420,
+        not_started,
+        columns=["repo_name", "gaps"],
+        extra_config=NOT_STARTED_COLUMNS,
+        height=380,
+        empty_message="Every applicable repo has started.",
     )
 
 
