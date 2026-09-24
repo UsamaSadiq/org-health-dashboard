@@ -23,12 +23,14 @@ health_pages = [
     st.Page("pages/01_overview.py", title="Overview", icon=":material/dashboard:", default=True),
     st.Page("pages/02_repo_detail.py", title="Repo Detail", icon=":material/search:"),
     st.Page("pages/03_failing_checks.py", title="Failing Checks", icon=":material/error:"),
-    st.Page("pages/04_needing_attention.py", title="Needing Attention", icon=":material/priority_high:"),
     st.Page("pages/05_what_changed.py", title="What Changed", icon=":material/trending_up:"),
-    st.Page("pages/12_maintenance.py", title="Maintenance", icon=":material/build:"),
 ]
 
-ownership_pages = []
+# Everything that asks someone to act: triage, thin ownership, who owns what,
+# and upgrade work (bot and human PRs).
+maintenance_pages = [
+    st.Page("pages/04_needing_attention.py", title="Needing Attention", icon=":material/priority_high:"),
+]
 # Backlog C4 asked for this section to be hidden when the snapshot carries no
 # ownership fields, on the grounds that an empty top-level section reads as a
 # broken product. Implemented and reverted: a page omitted from st.navigation()
@@ -42,9 +44,11 @@ ownership_pages = []
 # routing never sees it. That is a bigger change and needs a decision about
 # whether the URL should keep working; see docs/UX_REVIEW_BACKLOG.md C4.
 if flags.get("enable_maintainer_views", True):
-    ownership_pages.append(
-        st.Page("pages/09_ownership_views.py", title="Ownership", icon=":material/groups:")
-    )
+    maintenance_pages += [
+        st.Page("pages/13_at_risk.py", title="At Risk", icon=":material/warning:"),
+        st.Page("pages/09_ownership_views.py", title="Owners", icon=":material/groups:"),
+    ]
+maintenance_pages.append(st.Page("pages/12_maintenance.py", title="Upgrades", icon=":material/upgrade:"))
 
 tools_pages = []
 if flags.get("enable_sql_page", False):
@@ -54,16 +58,14 @@ if flags.get("enable_badge_links", False):
 if flags.get("enable_year_in_review_cards", False) or flags.get("enable_embeddable_score_cards", False):
     tools_pages.append(st.Page("pages/10_cards.py", title="Cards", icon=":material/style:"))
 
-meta_pages = [
+reference_pages = [
     st.Page("pages/06_glossary.py", title="Checks Catalog", icon=":material/menu_book:"),
     st.Page("pages/11_scoring.py", title="How Scoring Works", icon=":material/calculate:"),
 ]
 
-sections: dict[str, list] = {"Health": health_pages}
-if ownership_pages:
-    sections["Ownership"] = ownership_pages
+sections: dict[str, list] = {"Health": health_pages, "Maintenance": maintenance_pages}
 if tools_pages:
     sections["Tools"] = tools_pages
-sections["Meta"] = meta_pages
+sections["Reference"] = reference_pages
 
 st.navigation(sections).run()

@@ -163,11 +163,11 @@ def _render_redundant_prs() -> None:
 
 def render() -> None:
     page_init()
-    st.title("Maintenance")
+    st.title("Upgrades")
     st.caption(
-        "Routine upkeep across the org: whether automated requirement upgrades land, how far "
-        "platform-wide upgrade waves have reached, and bot PRs that are no longer needed. "
-        "Collected daily from public GitHub data; read-only."
+        "Upgrade work across the org, from bot and human PRs alike: whether automated "
+        "requirement upgrades land, how far platform-wide upgrade waves have reached, and "
+        "upgrade PRs that are no longer needed. Collected daily from public GitHub data; read-only."
     )
     wave_configs = load_config("waves").get("waves", {})
     labels = ["Upgrade jobs"] + [f"Wave: {wave['title']}" for wave in wave_configs.values()] + ["Redundant PRs"]
