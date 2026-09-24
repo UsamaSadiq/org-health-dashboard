@@ -146,3 +146,20 @@ def test_rows_are_ordered_by_status_then_score():
     result = stewardship.at_risk_repos(scored, None, now=NOW)
 
     assert list(result["repo_name"]) == ["openedx/a1", "openedx/a2", "openedx/b", "openedx/c"]
+
+
+def test_owner_override_counts_team_owned_repo_as_needing_maintainer():
+    scored = pd.DataFrame([_row("openedx/ccx-keys", "group:2u-arch-bom", "group", "2u-arch-bom", activity=10.0)])
+    rule = {"owner_overrides": {"openedx/ccx-keys": "owner team 2u-arch-bom has no access to the repo"}}
+
+    result = stewardship.at_risk_repos(scored, None, now=NOW, rule=rule)
+
+    assert list(result["owner_status"]) == [stewardship.NEEDS_MAINTAINER]
+    assert result.loc[0, "owner"] == "2u-arch-bom (owner team 2u-arch-bom has no access to the repo)"
+
+
+def test_overridden_repo_without_activity_warning_is_not_listed():
+    scored = pd.DataFrame([_row("openedx/ccx-keys", "group:2u-arch-bom", "group", "2u-arch-bom")])
+    rule = {"owner_overrides": {"openedx/ccx-keys": "no access"}}
+
+    assert stewardship.at_risk_repos(scored, None, now=NOW, rule=rule).empty
