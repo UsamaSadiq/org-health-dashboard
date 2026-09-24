@@ -325,20 +325,18 @@ def _base_css(p: Palette) -> str:
         if p.is_dark
         else f"linear-gradient(135deg, {p.surface_alt} 0%, #FAFCFE 100%)"
     )
-    # Streamlit's own chrome stays light-based (.streamlit/config.toml), so on the
-    # dark page its link blue and its white button faces fail contrast (axe
-    # color-contrast) once button labels inherit the dark theme's light text.
-    # Light mode keeps Streamlit's defaults, which pass.
-    dark_chrome = (
+    # Streamlit's native link colour and button faces come from its base theme
+    # (.streamlit/config.toml, dark), not from the active palette. Styling them
+    # from the palette keeps both themes readable (axe color-contrast).
+    native_chrome = (
         f'  [data-testid="stMain"] a:not([data-testid]) {{ color: {p.primary}; }}\n'
         f'  [data-testid="stMain"] .stButton button, [data-testid="stMain"] .stDownloadButton button {{\n'
         f'    background: {p.surface}; color: {p.text}; border-color: {p.border};\n'
         f'  }}\n'
+        f'  [data-testid="stMain"] .stButton button p, [data-testid="stMain"] .stDownloadButton button p {{ color: inherit; }}\n'
         f'  [data-testid="stMain"] .stButton button:hover, [data-testid="stMain"] .stDownloadButton button:hover {{\n'
         f'    border-color: {p.primary}; color: {p.primary};\n'
         f'  }}'
-        if p.is_dark
-        else ""
     )
 
     grade_rules = "\n".join(
@@ -696,7 +694,7 @@ def _base_css(p: Palette) -> str:
   .status-unknown {{ background: {_rgba(p.muted, 0.08)}; color: {p.chip_text["unknown"]}; }}
   /* "No data" is deliberately distinguishable from "unknown" by shape as well
      as colour, so it does not read as a muted pass. */
-{dark_chrome}
+{native_chrome}
   .status-nodata {{
     background: transparent;
     color: var(--color-muted);
