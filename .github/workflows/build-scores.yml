@@ -3,11 +3,20 @@ name: Build scores
 # Pre-computes scores from the openedx/wg-maintenance CSVs so readers render
 # files instead of running scoring. Output goes to the orphan `data` branch:
 # Streamlit Community Cloud redeploys on every push to main.
+# Scoring-code changes on main trigger a rebuild, so the app never pairs new
+# code with a file built by the old code for up to a day.
 
 on:
   schedule:
     - cron: "23 8 * * *"
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - dashboard/lib/scoring.py
+      - dashboard/lib/scores_export.py
+      - dashboard/config/*/scoring.yaml
+      - scripts/build_scores.py
 
 concurrency:
   group: build-scores
