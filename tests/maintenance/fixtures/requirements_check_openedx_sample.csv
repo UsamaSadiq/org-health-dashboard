@@ -1,0 +1,5 @@
+Repository,Total Runs,Failed Runs,Success Runs,Last PR Date,PR Number,PR URL,Last Release Date,Release Version,Release Name,Release Is Latest
+ccx-keys,10,10,0,2026-09-24,193,https://github.com/openedx/ccx-keys/pull/193,2024-12-02,2.0.2,2.0.2,True
+edx-rest-api-client,10,2,8,2026-05-08,437,https://github.com/openedx/edx-rest-api-client/pull/437,2026-09-21,v7.1.0,v7.1.0,True
+stale-repo,10,1,9,2026-07-01,12,https://github.com/openedx/stale-repo/pull/12,,,,
+never-merged,3,0,3,,,,,,,

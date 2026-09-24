@@ -1,0 +1,21 @@
+# Platform-wide upgrade waves tracked on the Maintenance page.
+# A repo is "done" when every `present` path exists and every `absent` path is
+# gone at the top level of its default branch. `applies_to` limits the wave to
+# repos that have at least one of the listed paths. Adding a wave is a config
+# entry; see plans/auto_fix_strategy for how waves were identified.
+waves:
+  uv_pyproject:
+    title: "Python packaging on pyproject.toml + uv"
+    epic: "https://github.com/openedx/public-engineering/issues/506"
+    applies_to:
+      has_any: ["setup.py", "setup.cfg", "pyproject.toml", "requirements"]
+    done:
+      present: ["uv.lock", "pyproject.toml"]
+      absent: ["setup.py", "setup.cfg", "requirements"]
+    # Paths a migrated repo keeps on purpose, checked 2026-09-24.
+    allowed_leftovers:
+      openedx/openedx-platform: ["requirements"]  # edx-sandbox and system requirements
+      openedx/repo-tools: ["requirements"]  # common_constraints.txt consumed by other repos
+    pull_requests:
+      search_terms: ["uv", "pyproject"]
+      title_regex: "\\buv\\b|pyproject"
