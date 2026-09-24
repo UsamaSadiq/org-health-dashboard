@@ -7,7 +7,7 @@ The Open edX Repository Health Dashboard is a community tool that provides visua
 **Live dashboard:** https://openedx-health-dashboard.streamlit.app/
 
 ## Key Features
-- 9-metric scoring system with CHAOSS and OpenSSF Scorecard integration
+- 9-metric scoring system cross-referenced to CHAOSS metrics and OpenSSF Scorecard checks
 - Historical trend analysis and delta detection
 - Deep linking and filter-preserving exports
 - Configurable remediation snippets and auto-PR generation

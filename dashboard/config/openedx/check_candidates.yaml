@@ -39,4 +39,4 @@ candidates:
   - name: "OpenSSF Scorecard ingestion"
     rationale: "Fold the full OpenSSF Scorecard result into the dashboard as first-class metrics."
     status: "phase-2"
-    feasibility: "Needs the Scorecard API/action; dashboard already has a scorecard client helper."
+    feasibility: "Run the scorecard CLI in the pipeline and commit its results; the dashboard makes no runtime API calls."

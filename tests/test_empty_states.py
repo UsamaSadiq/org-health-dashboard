@@ -26,7 +26,6 @@ PAGES_DIR = ROOT / "pages"
 # data that IS present, or a positive confirmation.
 ALLOWED_BARE_ALERTS = {
     "01_overview.py",       # the "scores are directional" caveat
-    "02_repo_detail.py",    # Scorecard fetch failure
     "07_sql.py",            # the reader's own query failing
     "09_ownership_views.py",  # ownership coverage caveat
     "10_cards.py",          # "found generated file" confirmation

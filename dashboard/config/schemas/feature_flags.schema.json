@@ -6,7 +6,6 @@
     "enable_badge_links": {"type": "boolean"},
     "enable_pr_template_generator": {"type": "boolean"},
     "enable_weekly_bulletin_export": {"type": "boolean"},
-    "enable_scorecard_panel": {"type": "boolean"},
     "enable_maintainer_views": {"type": "boolean"},
     "enable_my_repos_filter": {"type": "boolean"},
     "enable_year_in_review_cards": {"type": "boolean"},
