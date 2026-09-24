@@ -121,7 +121,7 @@ def test_snapshot_and_history_share_one_ttl() -> None:
     source = (ROOT / "dashboard" / "data.py").read_text(encoding="utf-8")
     assert "ttl=86400" not in source, "history still has its own longer TTL"
     # Every cache_data decorator should reference the shared constant.
-    assert source.count("ttl=CACHE_TTL_SECONDS") == 4
+    assert source.count("ttl=CACHE_TTL_SECONDS") == 5
     assert CACHE_TTL_SECONDS == 300
 
 
