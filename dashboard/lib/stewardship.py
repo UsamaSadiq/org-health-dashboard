@@ -4,6 +4,10 @@ Joins the ``ownership.*`` columns from ``catalog-info.yaml`` with activity and
 score history: the view Backstage's catalog cannot produce, because Backstage
 has owners but no health data. Thresholds come from ``attention_rules.yaml``
 (``stewardship_risk``) so they can be reviewed without touching code.
+
+``openedx-unmaintained`` means "no maintainer assigned yet", not retired: it
+holds production repos such as edx-ora2 and xqueue. Retired repos are the ones
+marked ``lifecycle: deprecated`` or archived, and those are left out.
 """
 from __future__ import annotations
 
@@ -19,19 +23,21 @@ OWNER_KIND_COL = "ownership.owner_kind"
 OWNER_NAME_COL = "ownership.owner_name"
 LIFECYCLE_COL = "ownership.lifecycle"
 RELEASE_COL = "ownership.release"
+ARCHIVED_COL = "github.is_archived"
 
-UNMAINTAINED = "unmaintained"
+NEEDS_MAINTAINER = "needs maintainer"
 SINGLE_PERSON = "single person"
 NO_OWNER = "no owner"
 TEAM = "team"
 
-AT_RISK_STATUSES = (UNMAINTAINED, SINGLE_PERSON, NO_OWNER)
+AT_RISK_STATUSES = (NEEDS_MAINTAINER, SINGLE_PERSON, NO_OWNER)
 
 DEFAULT_RULE: dict[str, Any] = {
     "unmaintained_group": "openedx-unmaintained",
     "weak_activity_below": 40,
     "stale_push_days": 180,
     "score_drop_points": 5,
+    "excluded_lifecycles": ["deprecated"],
     "catalog_url_template": "https://backstage.openedx.org/catalog/default/component/{name}",
 }
 
@@ -42,12 +48,17 @@ def _text(value: object) -> str:
 
 def owner_status(row: pd.Series, *, unmaintained_group: str) -> str:
     if _text(row.get(OWNER_NAME_COL)) == unmaintained_group:
-        return UNMAINTAINED
+        return NEEDS_MAINTAINER
     if not _text(row.get(OWNER_COL)):
         return NO_OWNER
     if _text(row.get(OWNER_KIND_COL)) == "user":
         return SINGLE_PERSON
     return TEAM
+
+
+def is_retired(row: pd.Series, *, excluded_lifecycles: list[str]) -> bool:
+    archived = _text(row.get(ARCHIVED_COL)).lower() in {"true", "1", "yes"}
+    return archived or _text(row.get(LIFECYCLE_COL)).lower() in excluded_lifecycles
 
 
 def has_column_data(df: pd.DataFrame, column: str) -> bool:
@@ -90,14 +101,20 @@ def at_risk_repos(
     now: datetime,
     rule: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
-    """One row per repo with thin ownership and at least one activity warning."""
+    """One row per non-retired repo with thin ownership and at least one activity warning.
+
+    Ordered needs-maintainer first, then single person, then no owner; lowest score first within each.
+    """
     rule = {**DEFAULT_RULE, **(rule or {})}
     if scored.empty or REPO_COL not in scored.columns:
         return pd.DataFrame()
 
     deltas = score_deltas(scored, baseline)
+    excluded = [value.lower() for value in rule["excluded_lifecycles"]]
     rows = []
     for index, row in scored.iterrows():
+        if is_retired(row, excluded_lifecycles=excluded):
+            continue
         status = owner_status(row, unmaintained_group=rule["unmaintained_group"])
         if status not in AT_RISK_STATUSES:
             continue
@@ -122,7 +139,19 @@ def at_risk_repos(
                 "catalog_link": catalog_url(repo, rule["catalog_url_template"]),
             }
         )
-    return pd.DataFrame(rows)
+    return _ordered(pd.DataFrame(rows))
+
+
+def _ordered(risky: pd.DataFrame) -> pd.DataFrame:
+    if risky.empty:
+        return risky
+    status_rank = risky["owner_status"].map(AT_RISK_STATUSES.index)
+    return (
+        risky.assign(_status_rank=status_rank)
+        .sort_values(["_status_rank", "score_composite", REPO_COL], kind="mergesort")
+        .drop(columns="_status_rank")
+        .reset_index(drop=True)
+    )
 
 
 def production_or_release(df: pd.DataFrame) -> pd.Series:
