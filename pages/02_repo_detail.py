@@ -7,12 +7,10 @@ from rapidfuzz import fuzz
 from dashboard.lib.config import get_config, get_feature_flags
 from dashboard.data import load_scored_history, load_scored_snapshot
 from dashboard.lib.linking import github_issue_url, github_pr_compare_url
-from dashboard.lib.ordering import rank
 from dashboard.lib.remediation import get_remediation
 from dashboard.lib.schema import humanize_check
-from dashboard.lib.scorecard import fetch_scorecard_result
 from dashboard.lib.share import base_url, share_link
-from dashboard.ui import empty_state, page_init, grade_pill, repo_table, share_link_block, status_chip
+from dashboard.ui import empty_state, page_init, grade_pill, share_link_block, status_chip
 from dashboard.ui.charts import metric_score_bar, sparkline
 
 
@@ -282,29 +280,6 @@ def render() -> None:
         f"Scoring config {repo_row.get('score_config_version', 'unknown')} · "
         "bars show each metric's contribution; unmeasured metrics are marked."
     )
-
-    if feature_flags.get("enable_scorecard_panel", False):
-        with st.expander("OpenSSF Scorecard parity", expanded=False):
-            try:
-                scorecard = fetch_scorecard_result(selected)
-            except Exception as exc:  # noqa: BLE001
-                scorecard = None
-                st.warning(f"Unable to fetch Scorecard data: {exc}")
-            if scorecard is None:
-                empty_state(
-                    "info",
-                    "No public OpenSSF Scorecard result for this repository.",
-                    "Scorecard publishes results only for repositories it has scanned.",
-                )
-            else:
-                m1, m2 = st.columns(2)
-                m1.metric("Scorecard score", f"{scorecard.score:.2f}" if scorecard.score is not None else "n/a")
-                m2.metric("Last scorecard date", scorecard.date or "n/a")
-                if scorecard.checks:
-                    checks_df = pd.DataFrame(
-                        [{"check": item.name, "score": item.score, "reason": item.reason} for item in scorecard.checks]
-                    )
-                    repo_table(rank(checks_df, "check", tiebreak="check"))
 
     # ----------------------------------------------------- category cards
     st.header("Category overview")
