@@ -11,6 +11,7 @@
     "history_csv_url": {"type": "string"},
     "scores_url": {"type": "string"},
     "history_scores_url": {"type": "string"},
+    "maintenance_base_url": {"type": "string"},
     "history_days": {"type": "integer", "minimum": 1},
     "cache_ttl_seconds": {"type": "integer", "minimum": 1},
     "fallback_to_last_known_good": {"type": "boolean"},
