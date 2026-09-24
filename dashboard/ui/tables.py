@@ -57,6 +57,11 @@ COLUMN_LABELS: dict[str, str] = {
     "d_or_f": "Grade D or F",
     "score": "Score",
     "reason": "Detail",
+    "owner_status": "Ownership",
+    "owner": "Owner",
+    "lifecycle": "Lifecycle",
+    "release": "Release",
+    "days_since_push": "Days since push",
 }
 
 NUMBER_FORMATS: dict[str, str] = {
@@ -71,7 +76,7 @@ NUMBER_FORMATS: dict[str, str] = {
 # Columns rendered as a bar rather than a bare number. Only 0-100 scores qualify.
 PROGRESS_COLUMNS = {"score_composite"}
 
-NARROW_COLUMNS = {"score_letter", "repo_tier", "d_or_f", "fail_count", "repo_count"}
+NARROW_COLUMNS = {"score_letter", "repo_tier", "d_or_f", "fail_count", "repo_count", "lifecycle", "release"}
 
 
 def _column_config(
