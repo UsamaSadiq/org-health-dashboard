@@ -34,6 +34,7 @@ from dashboard.lib.data import (
     load_my_repos as _load_my_repos,
     load_snapshot as _load_snapshot,
 )
+from dashboard.lib import maintenance
 from dashboard.lib.precomputed import fetch_payload, scored_history, scored_snapshot
 from dashboard.lib.tiers import annotate_tiers
 from dashboard.lib.trends import Snapshot
@@ -84,6 +85,12 @@ def load_scored_history(days: int | None = None) -> list[Snapshot]:
     return scored_history(load_history(days=days), fetch_payload(history_scores_url))
 
 
+@st.cache_data(ttl=CACHE_TTL_SECONDS)
+def load_maintenance(relative_path: str) -> dict[str, Any] | None:
+    """A file published by the collect-maintenance workflow, or None if unavailable."""
+    return maintenance.load(relative_path)
+
+
 def load_my_repos(handle: str) -> pd.DataFrame:
     """Filter snapshot by ownership columns for a GitHub handle."""
     return _load_my_repos(handle)
@@ -95,6 +102,7 @@ __all__ = [
     "has_ownership_data",
     "load_config",
     "load_history",
+    "load_maintenance",
     "load_my_repos",
     "load_scored_history",
     "load_scored_snapshot",

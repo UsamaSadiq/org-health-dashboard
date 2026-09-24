@@ -11,6 +11,8 @@ history_file: "dashboards/dashboard_history.csv"
 # file matches the current snapshot date and scoring.yaml version.
 scores_url: "https://raw.githubusercontent.com/UsamaSadiq/org-health-dashboard/data/openedx/scores.json"
 history_scores_url: "https://raw.githubusercontent.com/UsamaSadiq/org-health-dashboard/data/openedx/scores_history.json"
+# Files from .github/workflows/collect-maintenance.yml (upgrade jobs, waves, redundant PRs).
+maintenance_base_url: "https://raw.githubusercontent.com/UsamaSadiq/org-health-dashboard/data/openedx/maintenance"
 # Retention of the accumulated history file (matches the pipeline producer).
 history_days: 30
 cache_ttl_seconds: 300
