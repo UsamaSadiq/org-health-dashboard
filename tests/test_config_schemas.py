@@ -15,6 +15,8 @@ def test_openedx_config_files_validate_against_schemas():
         "attention_rules",
         "strings",
         "org_branding",
+        "waves",
+        "campaign_supersession",
     ]
 
     for name in config_names:
