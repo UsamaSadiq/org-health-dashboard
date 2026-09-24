@@ -1,0 +1,56 @@
+name: Build scores
+
+# Pre-computes scores from the openedx/wg-maintenance CSVs so readers render
+# files instead of running scoring. Output goes to the orphan `data` branch:
+# Streamlit Community Cloud redeploys on every push to main.
+
+on:
+  schedule:
+    - cron: "23 8 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: build-scores
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      OUT_DIR: ${{ github.workspace }}/out/openedx
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python scripts/build_scores.py --out-dir "$OUT_DIR"
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Publish to data branch
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin data >/dev/null; then
+            git clone --depth 1 --branch data "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data-branch
+          else
+            git init -b data data-branch
+            git -C data-branch remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          mkdir -p data-branch/openedx
+          cp "$OUT_DIR"/*.json data-branch/openedx/
+          cd data-branch
+          git add openedx
+          if git diff --cached --quiet; then
+            echo "Scores unchanged."
+            exit 0
+          fi
+          git commit -m "chore(data): update openedx scores $(date -u +%F)"
+          git push origin data
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
