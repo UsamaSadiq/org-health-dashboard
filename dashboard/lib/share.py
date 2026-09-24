@@ -30,6 +30,7 @@ _TAB_TO_PATH: dict[str, str] = {
     "what-changed": "what_changed",
     "ownership": "ownership_views",
     "glossary": "glossary",
+    "scoring": "scoring",
 }
 
 
