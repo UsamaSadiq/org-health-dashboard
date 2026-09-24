@@ -16,7 +16,9 @@
           "status": {"type": "string", "enum": ["computable", "unavailable"]},
           "default_when_missing": {"type": "number"},
           "parse_format": {"type": "string"},
-          "thresholds": {"type": "array"}
+          "thresholds": {"type": "array"},
+          "provisional": {"type": "boolean"},
+          "limitation": {"type": "string"}
         },
         "additionalProperties": true
       }

@@ -55,6 +55,7 @@ if flags.get("enable_year_in_review_cards", False) or flags.get("enable_embeddab
 
 meta_pages = [
     st.Page("pages/06_glossary.py", title="Checks Catalog", icon=":material/menu_book:"),
+    st.Page("pages/11_scoring.py", title="How Scoring Works", icon=":material/calculate:"),
 ]
 
 sections: dict[str, list] = {"Health": health_pages}
