@@ -3,9 +3,15 @@
 Collection is delegated to repo-tools' ``check_requirements_failures`` (pinned in
 ``requirements-collectors.txt``); this module only runs it and interprets its CSV.
 
-The tool's "last requirements PR" counts a PR merged into any branch, so a date
-alone can look healthy while every run fails (openedx/ccx-keys, 2026-09-24). A job
-is therefore judged on its recent failure share as well as on the date.
+Two different problems are reported separately:
+
+- ``failing``: the job itself breaks (half or more of the last 10 runs failed), so
+  no upgrade PR is produced. openedx/ccx-keys, 2026-09-24.
+- ``not_landing``: the job runs, but no requirements PR has been merged for weeks;
+  each week's PR is closed by the next one. openedx/edx-rest-api-client, 2026-09-24.
+
+The tool's "last requirements PR" counts a PR merged into any branch, so the
+failure share is checked first: a date alone can look healthy while every run fails.
 """
 from __future__ import annotations
 
@@ -30,6 +36,11 @@ EXPECTED_COLUMNS = (
 )
 FAILURE_SHARE_LIMIT = 0.5
 STALE_WEEKS = 4
+
+FAILING = "failing"
+NOT_LANDING = "not_landing"
+HEALTHY = "healthy"
+STATE_ORDER = (FAILING, NOT_LANDING, HEALTHY)
 
 
 def run_tool(org: str, out_dir: Path, repos: list[str] | None = None) -> Path:
@@ -64,15 +75,14 @@ def _weeks_since(day: date | None, today: date) -> int | None:
     return (today - day).days // 7 if day else None
 
 
-def _broken_reasons(failed: int, total: int, weeks: int | None) -> list[str]:
-    reasons = []
+def _state(failed: int, total: int, weeks: int | None) -> tuple[str, str]:
     if total and failed / total >= FAILURE_SHARE_LIMIT:
-        reasons.append(f"{failed} of the last {total} runs failed")
+        return FAILING, f"{failed} of the last {total} runs failed"
     if weeks is None:
-        reasons.append("no requirements PR ever merged")
-    elif weeks >= STALE_WEEKS:
-        reasons.append(f"no requirements PR merged in {weeks} weeks")
-    return reasons
+        return NOT_LANDING, "no requirements PR ever merged"
+    if weeks >= STALE_WEEKS:
+        return NOT_LANDING, f"no requirements PR merged in {weeks} weeks"
+    return HEALTHY, ""
 
 
 def to_record(row: dict[str, str], *, org: str, today: date) -> dict[str, Any]:
@@ -80,7 +90,7 @@ def to_record(row: dict[str, str], *, org: str, today: date) -> dict[str, Any]:
     last_merged = _date(row["Last PR Date"])
     last_release = _date(row["Last Release Date"])
     weeks = _weeks_since(last_merged, today)
-    reasons = _broken_reasons(failed, total, weeks)
+    state, reason = _state(failed, total, weeks)
     return {
         "repo_name": f"{org}/{row['Repository']}",
         "github.upgrade_job_runs_total": total,
@@ -91,12 +101,16 @@ def to_record(row: dict[str, str], *, org: str, today: date) -> dict[str, Any]:
         "weeks_since_requirements_pr": weeks,
         "last_release_date": last_release.isoformat() if last_release else None,
         "last_release_version": row.get("Release Version") or None,
-        "broken": bool(reasons),
-        "broken_reasons": reasons,
+        "state": state,
+        "reason": reason,
         "workflow_url": f"https://github.com/{org}/{row['Repository']}/actions/workflows/upgrade-python-requirements.yml",
     }
 
 
 def records(rows: list[dict[str, str]], *, org: str, today: date) -> list[dict[str, Any]]:
     built = [to_record(row, org=org, today=today) for row in rows]
-    return sorted(built, key=lambda record: (not record["broken"], record["repo_name"]))
+    return sorted(built, key=lambda record: (STATE_ORDER.index(record["state"]), record["repo_name"]))
+
+
+def counts(built: list[dict[str, Any]]) -> dict[str, int]:
+    return {state: sum(record["state"] == state for record in built) for state in STATE_ORDER}

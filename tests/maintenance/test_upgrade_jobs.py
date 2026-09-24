@@ -19,22 +19,39 @@ def by_repo() -> dict[str, dict]:
     return {record["repo_name"]: record for record in upgrade_jobs.records(rows, org="openedx", today=TODAY)}
 
 
-def test_all_runs_failing_is_broken_even_with_a_fresh_pr_date(by_repo):
+def test_all_runs_failing_is_failing_even_with_a_fresh_pr_date(by_repo):
     record = by_repo["openedx/ccx-keys"]
 
-    assert record["broken"]
-    assert record["broken_reasons"] == ["10 of the last 10 runs failed"]
+    assert record["state"] == upgrade_jobs.FAILING
+    assert record["reason"] == "10 of the last 10 runs failed"
     assert record["weeks_since_requirements_pr"] == 0
 
 
-def test_no_merge_for_four_weeks_is_broken(by_repo):
+def test_healthy_job_without_merges_is_not_landing(by_repo):
     record = by_repo["openedx/stale-repo"]
 
-    assert record["broken_reasons"] == ["no requirements PR merged in 12 weeks"]
+    assert record["state"] == upgrade_jobs.NOT_LANDING
+    assert record["reason"] == "no requirements PR merged in 12 weeks"
 
 
-def test_never_merged_is_broken(by_repo):
-    assert by_repo["openedx/never-merged"]["broken_reasons"] == ["no requirements PR ever merged"]
+def test_never_merged_is_not_landing(by_repo):
+    assert by_repo["openedx/never-merged"]["reason"] == "no requirements PR ever merged"
+
+
+def test_recent_merge_with_few_failures_is_healthy():
+    row = {
+        "Repository": "ok", "Total Runs": "10", "Failed Runs": "4", "Success Runs": "6",
+        "Last PR Date": "2026-09-20", "PR URL": "", "Last Release Date": "", "Release Version": "",
+    }
+
+    record = upgrade_jobs.to_record(row, org="openedx", today=TODAY)
+
+    assert record["state"] == upgrade_jobs.HEALTHY
+    assert record["reason"] == ""
+
+
+def test_counts_by_state(by_repo):
+    assert upgrade_jobs.counts(list(by_repo.values())) == {"failing": 1, "not_landing": 3, "healthy": 0}
 
 
 def test_record_fields(by_repo):
@@ -48,12 +65,12 @@ def test_record_fields(by_repo):
     assert record["workflow_url"].endswith("/openedx/edx-rest-api-client/actions/workflows/upgrade-python-requirements.yml")
 
 
-def test_broken_repos_are_listed_first(by_repo):
+def test_failing_then_not_landing_then_healthy(by_repo):
     rows = upgrade_jobs.read_rows(FIXTURE)
     ordered = upgrade_jobs.records(rows, org="openedx", today=TODAY)
 
-    flags = [record["broken"] for record in ordered]
-    assert flags == sorted(flags, reverse=True)
+    ranks = [upgrade_jobs.STATE_ORDER.index(record["state"]) for record in ordered]
+    assert ranks == sorted(ranks)
 
 
 def test_changed_tool_output_fails_loudly(tmp_path):

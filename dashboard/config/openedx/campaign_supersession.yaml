@@ -1,0 +1,10 @@
+# Bot campaign PRs that a later human campaign made redundant. The shared
+# requirements workflow only closes the bot's own older PRs, so supersession by a
+# different author needs an explicit mapping. Detection is a dry run: nothing is
+# closed automatically.
+campaigns:
+  action_sha_pinning:
+    bot_author: "edx-requirements-bot"
+    bot_title_prefix: "chore: Update Github action package versions with SHA commit"
+    human_search: "pin github actions workflows to full commit shas"
+    human_title_regex: "pin github actions? workflows? to full commit sha"

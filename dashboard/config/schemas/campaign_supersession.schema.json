@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["campaigns"],
+  "properties": {
+    "campaigns": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["bot_author", "bot_title_prefix", "human_search", "human_title_regex"],
+        "properties": {
+          "bot_author": {"type": "string"},
+          "bot_title_prefix": {"type": "string"},
+          "human_search": {"type": "string"},
+          "human_title_regex": {"type": "string"}
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}
