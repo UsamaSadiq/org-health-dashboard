@@ -25,6 +25,7 @@ health_pages = [
     st.Page("pages/03_failing_checks.py", title="Failing Checks", icon=":material/error:"),
     st.Page("pages/04_needing_attention.py", title="Needing Attention", icon=":material/priority_high:"),
     st.Page("pages/05_what_changed.py", title="What Changed", icon=":material/trending_up:"),
+    st.Page("pages/12_maintenance.py", title="Maintenance", icon=":material/build:"),
 ]
 
 ownership_pages = []
