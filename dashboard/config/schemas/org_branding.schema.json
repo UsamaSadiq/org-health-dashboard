@@ -3,6 +3,7 @@
   "type": "object",
   "properties": {
     "name": {"type": "string"},
+    "short_name": {"type": "string"},
     "tagline": {"type": "string"},
     "colors": {"type": "object"},
     "footer": {"type": "object"}

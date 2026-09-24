@@ -69,14 +69,7 @@ def render_sidebar_filters(
             supplied, tier options carry their counts.
     """
     with st.sidebar:
-        chip_html = freshness_chip_html(snapshot_date, stale_hours, critical_hours)
-        st.markdown(
-            '<div class="sidebar-identity">'
-            '<div class="sidebar-wordmark">Open edX Health</div>'
-            f'{chip_html}'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(freshness_chip_html(snapshot_date, stale_hours, critical_hours), unsafe_allow_html=True)
 
         st.markdown('<div class="sidebar-section">Filters</div>', unsafe_allow_html=True)
         search = st.text_input(
@@ -122,14 +115,6 @@ def render_sidebar_filters(
         # here and let report_result_count() fill it, rather than emitting the
         # caption after every other sidebar widget as the page used to.
         count_slot = st.empty()
-
-        st.markdown("---")
-        st.toggle(
-            "Dark mode",
-            value=st.session_state.get("theme_dark", False),
-            key="theme_dark",
-            help="Switches the dashboard to a dark palette.",
-        )
 
     return FilterState(
         search=search,

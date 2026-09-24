@@ -1,4 +1,5 @@
 name: "Open edX Repository Health Dashboard"
+short_name: "Open edX Health"
 tagline: "Visualization-first health insights for Open edX repositories"
 colors:
   primary: "#00262B"
