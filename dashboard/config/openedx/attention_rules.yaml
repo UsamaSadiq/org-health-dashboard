@@ -13,6 +13,13 @@ rules:
     enabled: true
     tier: "important"
     minimum_failing_checks: 5
+  stewardship_risk:
+    enabled: true
+    unmaintained_group: "openedx-unmaintained"
+    weak_activity_below: 40
+    stale_push_days: 180
+    score_drop_points: 5
+    catalog_url_template: "https://backstage.openedx.org/catalog/default/component/{name}"
   legacy_ci_signal:
     enabled: true
     travis_ci_active_column: "travis_ci.active"
