@@ -29,6 +29,7 @@ _TAB_TO_PATH: dict[str, str] = {
     "needing-attention": "needing_attention",
     "what-changed": "what_changed",
     "ownership": "ownership_views",
+    "at-risk": "at_risk",
     "glossary": "glossary",
     "scoring": "scoring",
     "maintenance": "maintenance",
