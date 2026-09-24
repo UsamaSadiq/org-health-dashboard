@@ -34,7 +34,7 @@ from dashboard.lib.data import (
     load_my_repos as _load_my_repos,
     load_snapshot as _load_snapshot,
 )
-from dashboard.lib.scoring import calculate_scores
+from dashboard.lib.precomputed import fetch_payload, scored_history, scored_snapshot
 from dashboard.lib.tiers import annotate_tiers
 from dashboard.lib.trends import Snapshot
 
@@ -59,8 +59,11 @@ def load_scored_snapshot() -> pd.DataFrame:
 
     The spinner is deliberate: on a cold cache this pays for a CSV fetch plus a
     full scoring pass, and the previous silence made that read as a hung page.
+    Uses the build-scores workflow's file when it matches this snapshot and
+    scoring config; otherwise scores locally.
     """
-    return calculate_scores(load_snapshot())
+    scores_url = load_config("data_source").get("scores_url")
+    return scored_snapshot(load_snapshot(), fetch_payload(scores_url))
 
 
 @st.cache_data(ttl=CACHE_TTL_SECONDS)
@@ -77,10 +80,8 @@ def load_scored_history(days: int | None = None) -> list[Snapshot]:
     ``st.cache_data`` hands out references, and scoring them in place would
     corrupt the unscored cache entry for every other caller.
     """
-    return [
-        Snapshot(timestamp=snapshot.timestamp, df=calculate_scores(snapshot.df))
-        for snapshot in load_history(days=days)
-    ]
+    history_scores_url = load_config("data_source").get("history_scores_url")
+    return scored_history(load_history(days=days), fetch_payload(history_scores_url))
 
 
 def load_my_repos(handle: str) -> pd.DataFrame:
