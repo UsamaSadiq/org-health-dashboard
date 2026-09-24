@@ -100,9 +100,9 @@ def test_plotly_template_follows_the_palette(active) -> None:
     assert pio.templates.default == PLOTLY_TEMPLATE_NAME
 
 
-def test_palette_defaults_to_light_outside_a_streamlit_run() -> None:
-    """Tests and offline tooling must not blow up resolving the theme."""
-    assert palette() is LIGHT
+def test_palette_defaults_to_dark_outside_a_streamlit_run() -> None:
+    """Tests and offline tooling must not blow up resolving the theme; dark is the default."""
+    assert palette() is DARK
 
 
 def test_rgba_helper_matches_known_values() -> None:

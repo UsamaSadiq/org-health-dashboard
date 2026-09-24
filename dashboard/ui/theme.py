@@ -35,8 +35,12 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
 
-# Session-state key written by the sidebar toggle in dashboard/ui/filters.py.
-THEME_STATE_KEY = "theme_dark"
+# The theme lives under a plain session-state key, not the toggle's widget key:
+# Streamlit drops a widget's state on any page that does not draw that widget, so
+# a theme stored on the widget reset whenever the viewer changed page. The toggle
+# (dashboard/ui/sidebar.py) writes here through its on_change callback.
+THEME_STATE_KEY = "theme_is_dark"
+DEFAULT_DARK = True
 
 
 def _rgba(hex_color: str, alpha: float) -> str:
@@ -231,16 +235,16 @@ PLOTLY_TEMPLATE_NAME = "openedx_health"
 
 
 def is_dark() -> bool:
-    """True when the viewer has switched the dark toggle on.
+    """True unless the viewer has switched to the light theme; dark is the default.
 
     Reads session state directly rather than taking a parameter so that any
     module can resolve the active theme without threading it through call
-    signatures. Safe outside a Streamlit run (returns False).
+    signatures. Safe outside a Streamlit run (returns the default).
     """
     try:
-        return bool(st.session_state.get(THEME_STATE_KEY, False))
+        return bool(st.session_state.get(THEME_STATE_KEY, DEFAULT_DARK))
     except Exception:  # noqa: BLE001 - no script run context (tests, tooling)
-        return False
+        return DEFAULT_DARK
 
 
 def palette() -> Palette:
@@ -321,6 +325,21 @@ def _base_css(p: Palette) -> str:
         if p.is_dark
         else f"linear-gradient(135deg, {p.surface_alt} 0%, #FAFCFE 100%)"
     )
+    # Streamlit's own chrome stays light-based (.streamlit/config.toml), so on the
+    # dark page its link blue and its white button faces fail contrast (axe
+    # color-contrast) once button labels inherit the dark theme's light text.
+    # Light mode keeps Streamlit's defaults, which pass.
+    dark_chrome = (
+        f'  [data-testid="stMain"] a:not([data-testid]) {{ color: {p.primary}; }}\n'
+        f'  [data-testid="stMain"] .stButton button, [data-testid="stMain"] .stDownloadButton button {{\n'
+        f'    background: {p.surface}; color: {p.text}; border-color: {p.border};\n'
+        f'  }}\n'
+        f'  [data-testid="stMain"] .stButton button:hover, [data-testid="stMain"] .stDownloadButton button:hover {{\n'
+        f'    border-color: {p.primary}; color: {p.primary};\n'
+        f'  }}'
+        if p.is_dark
+        else ""
+    )
 
     grade_rules = "\n".join(
         f"  .grade-{letter.lower()} {{ background: {p.grade_colors[letter]}; "
@@ -399,6 +418,10 @@ def _base_css(p: Palette) -> str:
   h2 {{ font-weight: 600; letter-spacing: -0.015em; font-size: 1.35rem; color: var(--color-text); }}
   h3 {{ font-weight: 600; letter-spacing: -0.01em; font-size: 1.1rem; color: var(--color-text); }}
   h4, h5, h6 {{ color: var(--color-text); }}
+  /* st.title / st.header / st.subheader carry Streamlit's own heading colour
+     (from .streamlit/config.toml) at higher specificity than the bare element
+     rules above, which left page titles dark-on-dark in the dark theme. */
+  [data-testid="stMain"] [data-testid="stHeading"] :is(h1, h2, h3, h4, h5, h6) {{ color: var(--color-text); }}
   p, li, .stMarkdown {{ color: var(--color-text); }}
 
   /* Tabular numerals for numeric UI */
@@ -673,6 +696,7 @@ def _base_css(p: Palette) -> str:
   .status-unknown {{ background: {_rgba(p.muted, 0.08)}; color: {p.chip_text["unknown"]}; }}
   /* "No data" is deliberately distinguishable from "unknown" by shape as well
      as colour, so it does not read as a muted pass. */
+{dark_chrome}
   .status-nodata {{
     background: transparent;
     color: var(--color-muted);

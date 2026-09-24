@@ -38,11 +38,12 @@ import streamlit as st
 # this module importable from `dashboard/ui/__init__.py` without a cycle.
 from dashboard.lib.config import get_feature_flags
 from dashboard.ui.filters import hydrate_from_query_params
+from dashboard.ui.sidebar import render_sidebar_header
 from dashboard.ui.theme import apply_base_style
 
 
 def page_init() -> None:
-    """Apply base styling and seed filter state from the URL.
+    """Apply base styling, seed filter state from the URL, and draw the sidebar header.
 
     Call this as the first statement of every page module, before any early
     return. It is the only thing standing between a deep-linked visitor and an
@@ -57,6 +58,7 @@ def page_init() -> None:
     """
     apply_base_style()
     hydrate_from_query_params()
+    render_sidebar_header()
 
 
 def feature_enabled(*flags: str, default: bool = False) -> bool:
