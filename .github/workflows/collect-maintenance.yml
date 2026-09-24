@@ -1,9 +1,9 @@
 name: Collect maintenance signals
 
-# Collects maintenance signals from public GitHub data (upgrade-job health; wave
-# and redundant-PR collectors are added alongside) and publishes them to
-# openedx/maintenance/ on the orphan `data` branch, next to the scores. The
-# dashboard only reads these files.
+# Collects maintenance signals from public GitHub data (upgrade-job health, upgrade
+# wave progress, redundant bot campaign PRs) and publishes them to
+# openedx/maintenance/ on the orphan `data` branch, next to the scores. Read-only:
+# nothing here writes to openedx repos. The dashboard only reads these files.
 
 on:
   schedule:
@@ -41,7 +41,7 @@ jobs:
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git clone --depth 1 --branch data "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data-branch
           mkdir -p data-branch/openedx/maintenance
-          cp "$OUT_DIR"/*.json data-branch/openedx/maintenance/
+          cp -R "$OUT_DIR"/. data-branch/openedx/maintenance/
           cd data-branch
           git add openedx/maintenance
           if git diff --cached --quiet; then

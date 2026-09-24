@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["waves"],
+  "properties": {
+    "waves": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["title", "done", "pull_requests"],
+        "properties": {
+          "title": {"type": "string"},
+          "epic": {"type": "string"},
+          "applies_to": {
+            "type": "object",
+            "properties": {"has_any": {"type": "array", "items": {"type": "string"}}}
+          },
+          "done": {
+            "type": "object",
+            "properties": {
+              "present": {"type": "array", "items": {"type": "string"}},
+              "absent": {"type": "array", "items": {"type": "string"}}
+            }
+          },
+          "allowed_leftovers": {
+            "type": "object",
+            "additionalProperties": {"type": "array", "items": {"type": "string"}}
+          },
+          "pull_requests": {
+            "type": "object",
+            "required": ["search_terms", "title_regex"],
+            "properties": {
+              "search_terms": {"type": "array", "items": {"type": "string"}},
+              "title_regex": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}
