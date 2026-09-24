@@ -1,0 +1,3 @@
+# Installed only by the collect-maintenance workflow, on top of requirements.txt.
+# Pinned: collectors/upgrade_jobs.py depends on this tool's CSV columns.
+edx-repo-tools==4.1.0
