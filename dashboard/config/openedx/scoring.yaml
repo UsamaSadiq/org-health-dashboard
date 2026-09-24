@@ -97,6 +97,7 @@ metrics:
     category: "structural"
     column: "exists.openedx.yaml"
     parse_rule: "boolean"
+    limitation: "Rewards openedx.yaml, which the community is replacing with catalog-info.yaml (public-engineering#410), so a repo that has already migrated loses these points."
     status: "computable"
     default_when_missing: 50
   dependency_freshness:

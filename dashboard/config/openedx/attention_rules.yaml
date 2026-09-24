@@ -21,6 +21,12 @@ rules:
     score_drop_points: 5
     excluded_lifecycles: ["deprecated"]
     catalog_url_template: "https://backstage.openedx.org/catalog/default/component/{name}"
+    # Repos whose catalog-info owner cannot act on the repo, checked 2026-09-24.
+    # Counted as needing a maintainer until the owner is fixed upstream.
+    owner_overrides:
+      openedx/ccx-keys: "owner team 2u-arch-bom has no access to the repo"
+      openedx/edx-bulk-grades: "owner team 2u-aurora has no access to the repo"
+      openedx/course-discovery: "owner team 2u-phoenix not found in the org"
   legacy_ci_signal:
     enabled: true
     travis_ci_active_column: "travis_ci.active"

@@ -38,6 +38,7 @@ DEFAULT_RULE: dict[str, Any] = {
     "stale_push_days": 180,
     "score_drop_points": 5,
     "excluded_lifecycles": ["deprecated"],
+    "owner_overrides": {},
     "catalog_url_template": "https://backstage.openedx.org/catalog/default/component/{name}",
 }
 
@@ -46,7 +47,11 @@ def _text(value: object) -> str:
     return "" if pd.isna(value) else str(value).strip()
 
 
-def owner_status(row: pd.Series, *, unmaintained_group: str) -> str:
+def owner_status(
+    row: pd.Series, *, unmaintained_group: str, owner_overrides: dict[str, str] | None = None
+) -> str:
+    if _text(row.get(REPO_COL)) in (owner_overrides or {}):
+        return NEEDS_MAINTAINER
     if _text(row.get(OWNER_NAME_COL)) == unmaintained_group:
         return NEEDS_MAINTAINER
     if not _text(row.get(OWNER_COL)):
@@ -111,11 +116,14 @@ def at_risk_repos(
 
     deltas = score_deltas(scored, baseline)
     excluded = [value.lower() for value in rule["excluded_lifecycles"]]
+    overrides = rule["owner_overrides"] or {}
     rows = []
     for index, row in scored.iterrows():
         if is_retired(row, excluded_lifecycles=excluded):
             continue
-        status = owner_status(row, unmaintained_group=rule["unmaintained_group"])
+        status = owner_status(
+            row, unmaintained_group=rule["unmaintained_group"], owner_overrides=overrides
+        )
         if status not in AT_RISK_STATUSES:
             continue
         days = _days_since_push(row, now)
@@ -123,11 +131,14 @@ def at_risk_repos(
         if not reasons:
             continue
         repo = str(row[REPO_COL])
+        owner = _text(row.get(OWNER_NAME_COL))
+        if repo in overrides:
+            owner = f"{owner} ({overrides[repo]})" if owner else overrides[repo]
         rows.append(
             {
                 REPO_COL: repo,
                 "owner_status": status,
-                "owner": _text(row.get(OWNER_NAME_COL)),
+                "owner": owner,
                 "lifecycle": _text(row.get(LIFECYCLE_COL)),
                 "release": _text(row.get(RELEASE_COL)),
                 "score_composite": row.get("score_composite"),
